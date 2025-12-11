@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_latihan1/models/notification_model_extension.dart';
+import 'package:warga_app/models/notification_model_extension.dart';
 import 'dart:async';
 import '../models/user_model.dart';
 import '../models/announcement_model.dart';
@@ -37,8 +37,6 @@ class _HomeScreenState extends State<HomeScreen> {
   bool _isLoadingNotifications = false;
 
   // TAMBAHKAN: Flag untuk auth check
-  bool _isCheckingAuth = true;
-  bool _isAuthenticated = false;
 
   // TAMBAHKAN: User data yang bisa diupdate
   late User _currentUser;
@@ -50,21 +48,49 @@ class _HomeScreenState extends State<HomeScreen> {
   Timer? _notificationTimer;
   Timer? _announcementTimer;
 
+  // TAMBAHKAN variable untuk tracking last load time
+  DateTime? _lastProfileLoadTime;
+
+
   @override
   void initState() {
     super.initState();
     _currentUser = widget.user;
-    _checkAuthentication();
+
+    // Langsung set UI ready
+
     _announcementsFuture = AnnouncementService.getAnnouncements();
 
-    // TAMBAHKAN: Load data profil saat init
+    // Load data background tanpa blocking
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      _loadUserProfileData();
+      _loadEverythingInBackground();
     });
 
-    // 🔄 TAMBAHKAN: Mulai timer untuk refresh otomatis
+    // Timer refresh
     _startAutoRefresh();
   }
+
+  // Fungsi background loading
+  void _loadEverythingInBackground() async {
+    try {
+      print('🔄 Loading background data...');
+
+      // 1. Cek token tapi jangan block
+      final token = await AuthService.getToken();
+      print('   Token status: ${token != null ? "Valid" : "Missing"}');
+
+      // 2. Load profil
+      await _loadUserProfileData();
+
+      // 3. Load notifikasi
+      await _loadNotifications();
+
+      print('✅ Background loading complete');
+    } catch (e) {
+      print('⚠️ Background error (non-critical): $e');
+    }
+  }
+
 
   @override
   void dispose() {
@@ -222,11 +248,10 @@ class _HomeScreenState extends State<HomeScreen> {
               _currentUser = User.fromJson(profileData);
             }
 
-            // Log untuk debugging foto profil
+            // UPDATE last load time
+            _lastProfileLoadTime = DateTime.now();
+
             print('🖼️ Profile photo URL: ${_currentUser.fotoProfil}');
-            print(
-              '🖼️ Has foto: ${_currentUser.fotoProfil != null && _currentUser.fotoProfil!.isNotEmpty}',
-            );
           });
         }
       }
@@ -236,51 +261,6 @@ class _HomeScreenState extends State<HomeScreen> {
       if (mounted) {
         setState(() => _isLoadingProfile = false);
       }
-    }
-  }
-
-  // TAMBAHKAN: Fungsi untuk cek authentication
-  Future<void> _checkAuthentication() async {
-    setState(() => _isCheckingAuth = true);
-
-    try {
-      // 1. Cek token
-      final token = await AuthService.getToken();
-      print('🔍 Checking auth in HomeScreen:');
-      print('   Token exists: ${token != null}');
-      print('   Token length: ${token?.length}');
-
-      // 2. Cek user data
-      final storedUser = await AuthService.getUser();
-      print('   Stored user: ${storedUser?.email}');
-      print('   Widget user: ${widget.user.email}');
-
-      if (token == null || token.isEmpty) {
-        print('❌ No token found, redirecting to login...');
-        _redirectToLogin();
-        return;
-      }
-
-      // 3. Validate user consistency
-      if (storedUser == null || storedUser.id != widget.user.id) {
-        print('⚠️ User mismatch, using widget user');
-      }
-
-      // 4. Load data profil terbaru
-      await _loadUserProfileData();
-
-      // 🔄 TAMBAHKAN: Load notifikasi setelah auth berhasil
-      await _loadNotifications(showLoading: true);
-
-      setState(() {
-        _isAuthenticated = true;
-        _isCheckingAuth = false;
-      });
-
-      print('✅ Authentication check passed');
-    } catch (e) {
-      print('❌ Auth check error: $e');
-      _redirectToLogin();
     }
   }
 
@@ -413,128 +393,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // MODIFIKASI: Widget untuk menampilkan foto profil
-  Widget _buildProfileAvatar({double size = 48}) {
-    if (_isLoadingProfile) {
-      return Container(
-        width: size,
-        height: size,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          color: Colors.white,
-          border: Border.all(color: Colors.white, width: 2),
-        ),
-        child: Center(
-          child: CircularProgressIndicator(
-            strokeWidth: 2,
-            valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
-          ),
-        ),
-      );
-    }
-
-    // Cek apakah ada foto profil dari API
-    final hasPhoto =
-        _currentUser.fotoProfil != null &&
-        _currentUser.fotoProfil!.isNotEmpty &&
-        _currentUser.fotoProfil!.startsWith('http');
-
-    // Cek apakah ada inisial nama dari user
-    final userName =
-        _currentUser.namaLengkap ?? _currentUser.email.split('@')[0];
-    final initials = _getInitials(userName);
-
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        border: Border.all(color: Colors.white, width: 2),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.blue.shade800.withOpacity(0.3),
-            blurRadius: 8,
-            offset: const Offset(0, 3),
-          ),
-        ],
-      ),
-      child: hasPhoto
-          ? ClipOval(
-              child: Image.network(
-                _currentUser.fotoProfil!,
-                fit: BoxFit.cover,
-                width: size,
-                height: size,
-                loadingBuilder: (context, child, loadingProgress) {
-                  if (loadingProgress == null) return child;
-                  return Container(
-                    decoration: BoxDecoration(
-                      gradient: LinearGradient(
-                        colors: [Colors.white, _getColorFromName(userName)],
-                        begin: Alignment.topLeft,
-                        end: Alignment.bottomRight,
-                      ),
-                    ),
-                    child: Center(
-                      child: CircularProgressIndicator(
-                        value: loadingProgress.expectedTotalBytes != null
-                            ? loadingProgress.cumulativeBytesLoaded /
-                                  loadingProgress.expectedTotalBytes!
-                            : null,
-                        strokeWidth: 2,
-                        valueColor: AlwaysStoppedAnimation<Color>(
-                          Colors.blue.shade600,
-                        ),
-                      ),
-                    ),
-                  );
-                },
-                errorBuilder: (context, error, stackTrace) {
-                  return _buildInitialsAvatar(userName, initials, size);
-                },
-              ),
-            )
-          : _buildInitialsAvatar(userName, initials, size),
-    );
-  }
-
-  // TAMBAHKAN: Fungsi untuk membuat avatar dengan inisial
-  Widget _buildInitialsAvatar(String userName, String initials, double size) {
-    final color = _getColorFromName(userName);
-
-    return Container(
-      width: size,
-      height : size, 
-      decoration: BoxDecoration(
-        gradient: LinearGradient(
-          colors: [color.withOpacity(0.9), color.withOpacity(0.7)],
-          begin: Alignment.topLeft,
-          end: Alignment.bottomRight,
-        ),
-        shape: BoxShape.circle
-      ),
-      child: Center(
-        child: FittedBox(
-          // TAMBAHKAN: Gunakan FittedBox
-          fit: BoxFit.scaleDown,
-          child: Padding(
-            padding: const EdgeInsets.all(8.0),
-            child: Text(
-              initials,
-              style: TextStyle(
-                color: Colors.white,
-                fontSize: size * 0.3, // PERKECIL sedikit ukuran font
-                fontWeight: FontWeight.bold,
-                height: 1.0, // TAMBAHKAN: Set height ke 1.0
-              ),
-              textAlign: TextAlign.center,
-            ),
-          ),
-        ),
-      ),
-    );
-  }
-
   // TAMBAHKAN: Fungsi untuk mendapatkan inisial dari nama
   String _getInitials(String name) {
     final nameParts = name.trim().split(' ');
@@ -607,8 +465,17 @@ class _HomeScreenState extends State<HomeScreen> {
 
   // MODIFIKASI: Menu profile dengan foto yang sama
   void _showProfile() {
-    // Refresh data profil sebelum menampilkan
-    _loadUserProfileData();
+    // TIDAK PERLU refresh data profil setiap kali menu dibuka
+    // Hanya refresh jika data belum ada atau lama sekali
+    final now = DateTime.now();
+    final lastLoadedTime = _lastProfileLoadTime;
+    final shouldRefresh =
+        lastLoadedTime == null ||
+        now.difference(lastLoadedTime) > Duration(minutes: 5);
+
+    if (shouldRefresh) {
+      _loadUserProfileData();
+    }
 
     showModalBottomSheet(
       context: context,
@@ -636,12 +503,13 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
 
-            // Header profil dengan foto yang sama
+            // Header profil dengan foto INSTANT
             Padding(
               padding: const EdgeInsets.all(20),
               child: Row(
                 children: [
-                  _buildProfileAvatar(size: 60),
+                  // GANTI dengan widget yang TIDAK ADA loading
+                  _buildProfileAvatarInstant(size: 60),
                   const SizedBox(width: 16),
                   Expanded(
                     child: Column(
@@ -746,17 +614,90 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // TAMBAHKAN: Loading saat cek auth
-  Widget _buildAuthChecking() {
-    return const Scaffold(
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(),
-            SizedBox(height: 20),
-            Text('Memeriksa autentikasi...'),
-          ],
+  Widget _buildProfileAvatarInstant({double size = 48}) {
+    // Langsung render tanpa loading
+    final userName =
+        _currentUser.namaLengkap ?? _currentUser.email.split('@')[0];
+    final initials = _getInitials(userName);
+
+    // Cek apakah ada foto profil dari API
+    final hasPhoto =
+        _currentUser.fotoProfil != null &&
+        _currentUser.fotoProfil!.isNotEmpty &&
+        _currentUser.fotoProfil!.startsWith('http');
+
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.blue.shade800.withOpacity(0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: hasPhoto
+          ? ClipOval(
+              child: Image.network(
+                _currentUser.fotoProfil!,
+                fit: BoxFit.cover,
+                width: size,
+                height: size,
+                // INSTANT dengan fallback
+                frameBuilder: (context, child, frame, wasSynchronouslyLoaded) {
+                  if (wasSynchronouslyLoaded) {
+                    return child;
+                  }
+                  // Jika loading, langsung show initials
+                  return _buildInitialsAvatarInstant(userName, initials, size);
+                },
+                errorBuilder: (context, error, stackTrace) {
+                  return _buildInitialsAvatarInstant(userName, initials, size);
+                },
+              ),
+            )
+          : _buildInitialsAvatarInstant(userName, initials, size),
+    );
+  }
+
+  Widget _buildInitialsAvatarInstant(
+    String userName,
+    String initials,
+    double size,
+  ) {
+    final color = _getColorFromName(userName);
+
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [color.withOpacity(0.9), color.withOpacity(0.7)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        shape: BoxShape.circle,
+      ),
+      child: Center(
+        child: FittedBox(
+          fit: BoxFit.scaleDown,
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Text(
+              initials,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: size * 0.3,
+                fontWeight: FontWeight.bold,
+                height: 1.0,
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
         ),
       ),
     );
@@ -764,38 +705,9 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    // TAMBAHKAN: Tampilkan loading jika sedang cek auth
-    if (_isCheckingAuth) {
-      return _buildAuthChecking();
-    }
+    // Langsung render HomeScreen tanpa cek auth
+    // TIDAK PERLU loading screen auth
 
-    // TAMBAHKAN: Tampilkan error jika tidak terautentikasi
-    if (!_isAuthenticated) {
-      return Scaffold(
-        body: Center(
-          child: Column(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Icon(Icons.error_outline, color: Colors.red, size: 64),
-              const SizedBox(height: 20),
-              const Text(
-                'Sesi telah berakhir',
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-              ),
-              const SizedBox(height: 10),
-              const Text('Silakan login kembali'),
-              const SizedBox(height: 20),
-              ElevatedButton(
-                onPressed: _redirectToLogin,
-                child: const Text('Login Ulang'),
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
-    // KODE ASAL YANG SUDAH ADA
     return Scaffold(
       body: _currentIndex == 0 ? _buildHomeContent() : _buildOtherScreen(),
       bottomNavigationBar: _buildBottomNavBar(),
@@ -1539,10 +1451,10 @@ class _HomeScreenState extends State<HomeScreen> {
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // Foto Profil yang sama dengan ProfileScreen
+              // GANTI dengan instant avatar di header juga
               GestureDetector(
                 onTap: _showProfile,
-                child: _buildProfileAvatar(),
+                child: _buildProfileAvatarInstant(),
               ),
               GestureDetector(
                 onTap: _showNotifications,
@@ -2001,7 +1913,11 @@ class _HomeScreenState extends State<HomeScreen> {
         : _announcements;
 
     return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24),
+      padding: const EdgeInsets.only(
+        left: 24,
+        right: 24,
+        bottom: 25, // <-- TAMBAHKAN INI untuk jarak dari bottom navbar
+      ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [

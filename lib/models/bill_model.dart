@@ -1,6 +1,6 @@
 // models/bill_model.dart
-import 'package:flutter_latihan1/models/transaction_model.dart' show Pagination;
-import 'package:flutter_latihan1/models/user_model.dart';
+import 'package:warga_app/models/transaction_model.dart' show Pagination;
+import 'package:warga_app/models/user_model.dart';
 
 class Bill {
   final String id;

@@ -1,5 +1,5 @@
 // models/auth_models.dart
-import 'package:flutter_latihan1/models/register_model.dart';
+import 'package:warga_app/models/register_model.dart';
 
 class AuthResponse {
   final String message;

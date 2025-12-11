@@ -1,13 +1,15 @@
 // profile_screen.dart
 import 'dart:io';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:flutter_latihan1/screens/login_screen.dart';
+import 'package:warga_app/screens/login_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/user_model.dart';
 import '../services/profile_service.dart';
 import '../services/auth_service.dart';
 import '../widget/flutter_pdfview.dart';
+
 
 class ProfileScreen extends StatefulWidget {
   final User user;
@@ -20,7 +22,6 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   late User _currentUser;
-  bool _isLoading = false;
   Map<String, dynamic>? _kkStatus;
   bool _isUpdatingProfile = false;
   bool _isUploadingKK = false; // Tambahkan ini
@@ -29,60 +30,91 @@ class _ProfileScreenState extends State<ProfileScreen> {
   void initState() {
     super.initState();
     _currentUser = widget.user;
-    _loadUserData();
+
+    // Langsung set KK status null atau fallback
+    _kkStatus = null;
+
+    // Load data di background tanpa blocking UI
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadUserDataInBackground();
+    });
   }
 
+  // TAMBAHKAN: Load data di background
+  Future<void> _loadUserDataInBackground() async {
+    try {
+      print('🔄 Loading user profile data in background...');
+
+      // Load user profile data
+      final profileData = await ProfileService.getProfile();
+
+      if (mounted) {
+        if (profileData['user'] != null) {
+          setState(() {
+            _currentUser = User.fromJson(profileData['user']);
+          });
+        } else if (profileData['id'] != null) {
+          setState(() {
+            _currentUser = User.fromJson(profileData);
+          });
+        }
+      }
+
+      // Load KK verification status di background
+      try {
+        final kkData = await ProfileService.getKKVerificationStatus();
+        if (mounted) {
+          setState(() => _kkStatus = kkData);
+        }
+      } catch (e) {
+        print('⚠️ Error loading KK status in background: $e');
+      }
+
+      print('✅ Background profile data loaded');
+    } catch (e) {
+      print('⚠️ Background profile load error (non-critical): $e');
+      // Tidak tampilkan error ke user karena UI sudah ada
+    }
+  }
+
+  // Ubah _loadUserData() menjadi hanya untuk background refresh
   Future<void> _loadUserData() async {
     try {
-      setState(() => _isLoading = true);
-
-      print('🔄 Loading user profile data...');
+      print('🔄 Refreshing user profile data...');
 
       // Load user profile data
       final profileData = await ProfileService.getProfile();
       print('📊 Raw profile data: $profileData');
 
-      // Cek apakah data user ada di root atau nested
-      if (profileData['user'] != null) {
-        print('✅ Found user in nested "user" field');
-        setState(() {
-          _currentUser = User.fromJson(profileData['user']);
-        });
-      } else if (profileData['id'] != null) {
-        print('✅ Found user in root object');
-        setState(() {
-          _currentUser = User.fromJson(profileData);
-        });
-      } else {
-        print('⚠️ No user data found in response');
+      // Update state jika ada perubahan
+      if (mounted) {
+        if (profileData['user'] != null) {
+          print('✅ Found user in nested "user" field');
+          setState(() {
+            _currentUser = User.fromJson(profileData['user']);
+          });
+        } else if (profileData['id'] != null) {
+          print('✅ Found user in root object');
+          setState(() {
+            _currentUser = User.fromJson(profileData);
+          });
+        }
       }
 
       // Load KK verification status
       try {
         final kkData = await ProfileService.getKKVerificationStatus();
-        setState(() => _kkStatus = kkData);
+        if (mounted) {
+          setState(() => _kkStatus = kkData);
+        }
       } catch (e) {
         print('⚠️ Error loading KK status: $e');
-        _kkStatus = null;
       }
 
-      // Load dashboard stats
-      try {
-        await ProfileService.getDashboardStats();
-      } catch (e) {
-        print('⚠️ Error loading dashboard stats: $e');
-      }
-
-      print('✅ Profile data loaded successfully');
-      print('   Name: ${_currentUser.namaLengkap}');
-      print('   Email: ${_currentUser.email}');
-      print('   Phone: ${_currentUser.nomorTelepon}');
-      print('   Address: ${_currentUser.alamat}');
+      print('✅ Profile data refreshed');
     } catch (e) {
-      print('❌ Error loading profile data: $e');
-      _showErrorSnackbar('Gagal memuat data profil: ${e.toString()}');
-    } finally {
-      setState(() => _isLoading = false);
+      print('❌ Error refreshing profile data: $e');
+      // Tidak tampilkan error ke user karena UI sudah ada
     }
   }
 
@@ -98,7 +130,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
 
       if (pickedFile != null) {
-        setState(() => _isLoading = true);
 
         final file = File(pickedFile.path);
 
@@ -106,7 +137,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         final fileSize = await file.length();
         if (fileSize > 5 * 1024 * 1024) {
           _showErrorSnackbar('Ukuran file maksimal 5MB');
-          setState(() => _isLoading = false);
           return;
         }
 
@@ -116,7 +146,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _showErrorSnackbar(
             'Format file tidak didukung. Gunakan JPG, JPEG, atau PNG',
           );
-          setState(() => _isLoading = false);
           return;
         }
 
@@ -175,7 +204,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _showErrorSnackbar(errorMessage);
     } finally {
       if (mounted) {
-        setState(() => _isLoading = false);
       }
     }
   }
@@ -185,203 +213,177 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
-        child: _isLoading
-            ? _buildLoading()
-            : Column(
-                children: [
-                  // Header dengan tombol back
-                  _buildHeader(),
+        child: Column(
+          children: [
+            // Header dengan tombol back
+            _buildHeader(),
 
-                  Expanded(
-                    child: Padding(
-                      padding: const EdgeInsets.all(20),
-                      child: ListView(
-                        physics: const BouncingScrollPhysics(),
-                        children: [
-                          // Info KK Verification jika ada
-                          if (_kkStatus != null) _buildKKVerificationCard(),
-                          if (_kkStatus != null) const SizedBox(height: 20),
+            Expanded(
+              child: Padding(
+                padding: const EdgeInsets.all(20),
+                child: ListView(
+                  physics: const BouncingScrollPhysics(),
+                  children: [
+                    // Info KK Verification jika ada
+                    if (_kkStatus != null) _buildKKVerificationCard(),
+                    if (_kkStatus != null) const SizedBox(height: 20),
 
-                          // Menu Profil
-                          _buildMenuSection('Akun Saya', [
-                            _buildMenuTile(
-                              Icons.person_outline,
-                              'Edit Profil',
-                              'Ubah informasi profil Anda',
-                              Icons.arrow_forward_ios,
-                              () => _showEditProfileDialog(context),
-                            ),
-                            _buildMenuTile(
-                              Icons.security_outlined,
-                              'Keamanan Akun',
-                              'Pengaturan keamanan akun',
-                              Icons.arrow_forward_ios,
-                              () => _showSecuritySettings(context),
-                            ),
-                            _buildMenuTile(
-                              Icons.notifications_outlined,
-                              'Notifikasi',
-                              'Kelola notifikasi aplikasi',
-                              Icons.arrow_forward_ios,
-                              () => _showNotificationSettings(context),
-                            ),
-                            _buildMenuTile(
-                              Icons.photo_camera_outlined,
-                              'Ubah Foto Profil',
-                              'Ganti foto profil Anda',
-                              Icons.arrow_forward_ios,
-                              _pickAndUploadImage,
-                            ),
-                          ]),
+                    // Menu Profil
+                    _buildMenuSection('Akun Saya', [
+                      _buildMenuTile(
+                        Icons.person_outline,
+                        'Edit Profil',
+                        'Ubah informasi profil Anda',
+                        Icons.arrow_forward_ios,
+                        () => _showEditProfileDialog(context),
+                      ),
+                      _buildMenuTile(
+                        Icons.security_outlined,
+                        'Keamanan Akun',
+                        'Pengaturan keamanan akun',
+                        Icons.arrow_forward_ios,
+                        () => _showSecuritySettings(context),
+                      ),
+                      _buildMenuTile(
+                        Icons.notifications_outlined,
+                        'Notifikasi',
+                        'Kelola notifikasi aplikasi',
+                        Icons.arrow_forward_ios,
+                        () => _showNotificationSettings(context),
+                      ),
+                      _buildMenuTile(
+                        Icons.photo_camera_outlined,
+                        'Ubah Foto Profil',
+                        'Ganti foto profil Anda',
+                        Icons.arrow_forward_ios,
+                        _pickAndUploadImage,
+                      ),
+                    ]),
 
-                          const SizedBox(height: 24),
+                    const SizedBox(height: 24),
 
-                          // Informasi Personal
-                          _buildPersonalInfoSection(),
+                    // Informasi Personal - TAMPILKAN LANGSUNG
+                    _buildPersonalInfoSection(),
 
-                          const SizedBox(height: 24),
+                    const SizedBox(height: 24),
 
-                          // Lainnya
-                          _buildMenuSection('Lainnya', [
-                            _buildMenuTile(
-                              Icons.help_outline,
-                              'Bantuan & Dukungan',
-                              'Dapatkan bantuan dan support',
-                              Icons.arrow_forward_ios,
-                              () => _showHelpSupport(context),
-                            ),
-                            _buildMenuTile(
-                              Icons.privacy_tip_outlined,
-                              'Kebijakan Privasi',
-                              'Baca kebijakan privasi kami',
-                              Icons.arrow_forward_ios,
-                              () => _showPrivacyPolicy(context),
-                            ),
-                            _buildMenuTile(
-                              Icons.description_outlined,
-                              'Syarat & Ketentuan',
-                              'Ketentuan penggunaan aplikasi',
-                              Icons.arrow_forward_ios,
-                              () => _showTermsConditions(context),
-                            ),
-                            _buildMenuTile(
-                              Icons.star_outline,
-                              'Beri Rating',
-                              'Beri nilai untuk aplikasi kami',
-                              Icons.arrow_forward_ios,
-                              () => _showRatingDialog(context),
-                            ),
-                          ]),
+                    // Lainnya
+                    _buildMenuSection('Lainnya', [
+                      _buildMenuTile(
+                        Icons.help_outline,
+                        'Bantuan & Dukungan',
+                        'Dapatkan bantuan dan support',
+                        Icons.arrow_forward_ios,
+                        () => _showHelpSupport(context),
+                      ),
+                      _buildMenuTile(
+                        Icons.privacy_tip_outlined,
+                        'Kebijakan Privasi',
+                        'Baca kebijakan privasi kami',
+                        Icons.arrow_forward_ios,
+                        () => _showPrivacyPolicy(context),
+                      ),
+                      _buildMenuTile(
+                        Icons.description_outlined,
+                        'Syarat & Ketentuan',
+                        'Ketentuan penggunaan aplikasi',
+                        Icons.arrow_forward_ios,
+                        () => _showTermsConditions(context),
+                      ),
+                      _buildMenuTile(
+                        Icons.star_outline,
+                        'Beri Rating',
+                        'Beri nilai untuk aplikasi kami',
+                        Icons.arrow_forward_ios,
+                        () => _showRatingDialog(context),
+                      ),
+                    ]),
 
-                          const SizedBox(height: 40),
+                    const SizedBox(height: 40),
 
-                          // Tombol Home dan Logout
-                          Row(
-                            children: [
-                              // Tombol Home
-                              Expanded(
-                                child: Container(
-                                  margin: const EdgeInsets.only(right: 8),
-                                  child: ElevatedButton(
-                                    onPressed: () => Navigator.pop(context),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.grey.shade100,
-                                      foregroundColor: Colors.blue.shade700,
-                                      elevation: 2,
-                                      minimumSize: const Size(
-                                        double.infinity,
-                                        50,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                        side: BorderSide(
-                                          color: Colors.blue.shade200,
-                                        ),
-                                      ),
-                                    ),
-                                    child: const Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Icon(Icons.home, size: 20),
-                                        SizedBox(width: 8),
-                                        Text('Beranda'),
-                                      ],
-                                    ),
-                                  ),
+                    // Tombol Home dan Logout
+                    Row(
+                      children: [
+                        // Tombol Home
+                        Expanded(
+                          child: Container(
+                            margin: const EdgeInsets.only(right: 8),
+                            child: ElevatedButton(
+                              onPressed: () => Navigator.pop(context),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.grey.shade100,
+                                foregroundColor: Colors.blue.shade700,
+                                elevation: 2,
+                                minimumSize: const Size(double.infinity, 50),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  side: BorderSide(color: Colors.blue.shade200),
                                 ),
                               ),
-
-                              // Tombol Logout
-                              Expanded(
-                                child: Container(
-                                  margin: const EdgeInsets.only(left: 8),
-                                  child: ElevatedButton(
-                                    onPressed: () => _showLogoutDialog(context),
-                                    style: ElevatedButton.styleFrom(
-                                      backgroundColor: Colors.red.shade50,
-                                      foregroundColor: Colors.red,
-                                      elevation: 2,
-                                      minimumSize: const Size(
-                                        double.infinity,
-                                        50,
-                                      ),
-                                      shape: RoundedRectangleBorder(
-                                        borderRadius: BorderRadius.circular(12),
-                                        side: BorderSide(
-                                          color: Colors.red.shade200,
-                                        ),
-                                      ),
-                                    ),
-                                    child: const Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Icon(Icons.logout, size: 20),
-                                        SizedBox(width: 8),
-                                        Text('Keluar'),
-                                      ],
-                                    ),
-                                  ),
-                                ),
-                              ),
-                            ],
-                          ),
-
-                          const SizedBox(height: 20),
-
-                          // Version Info
-                          Center(
-                            child: Text(
-                              'Versi 1.0.0',
-                              style: TextStyle(
-                                color: Colors.grey.shade500,
-                                fontSize: 12,
+                              child: const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.home, size: 20),
+                                  SizedBox(width: 8),
+                                  Text('Beranda'),
+                                ],
                               ),
                             ),
                           ),
-                        ],
+                        ),
+
+                        // Tombol Logout
+                        Expanded(
+                          child: Container(
+                            margin: const EdgeInsets.only(left: 8),
+                            child: ElevatedButton(
+                              onPressed: () => _showLogoutDialog(context),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: Colors.red.shade50,
+                                foregroundColor: Colors.red,
+                                elevation: 2,
+                                minimumSize: const Size(double.infinity, 50),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(12),
+                                  side: BorderSide(color: Colors.red.shade200),
+                                ),
+                              ),
+                              child: const Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(Icons.logout, size: 20),
+                                  SizedBox(width: 8),
+                                  Text('Keluar'),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // Version Info
+                    Center(
+                      child: Text(
+                        'Versi 1.0.0',
+                        style: TextStyle(
+                          color: Colors.grey.shade500,
+                          fontSize: 12,
+                        ),
                       ),
                     ),
-                  ),
-                ],
+                  ],
+                ),
               ),
+            ),
+          ],
+        ),
       ),
     );
   }
 
-  Widget _buildLoading() {
-    return const Center(
-      child: Column(
-        mainAxisAlignment: MainAxisAlignment.center,
-        children: [
-          CircularProgressIndicator(),
-          SizedBox(height: 20),
-          Text('Memuat data profil...'),
-        ],
-      ),
-    );
-  }
 
   // Helper untuk cek kelengkapan profil
   int _getProfileCompletionPercentage() {
@@ -402,6 +404,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   // Tambahkan di header untuk menunjukkan progress
+  // Ganti bagian _buildHeader() dengan kode berikut:
   Widget _buildHeader() {
     final completionPercentage = _getProfileCompletionPercentage();
 
@@ -539,66 +542,91 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
             textAlign: TextAlign.center,
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: 8),
 
-          // Badge Role dan Status Verifikasi
-          Row(
-            mainAxisAlignment: MainAxisAlignment.center,
-            children: [
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(color: Colors.white.withOpacity(0.3)),
-                ),
-                child: Text(
-                  _currentUser.role?.toUpperCase() ?? 'WARGA',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
+          // Bio - MENGGANTI BADGE ROLE DAN VERIFIKASI DENGAN BIO
+          if (_currentUser.bio != null && _currentUser.bio!.isNotEmpty)
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.15),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white.withOpacity(0.2)),
+              ),
+              child: Column(
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        Icons.info_outline,
+                        color: Colors.white.withOpacity(0.8),
+                        size: 16,
+                      ),
+                      const SizedBox(width: 6),
+                      Text(
+                        'Bio',
+                        style: TextStyle(
+                          color: Colors.white.withOpacity(0.9),
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
                   ),
+                  const SizedBox(height: 6),
+                  Text(
+                    _currentUser.bio!,
+                    textAlign: TextAlign.center,
+                    style: TextStyle(
+                      color: Colors.white.withOpacity(0.9),
+                      fontSize: 14,
+                      fontStyle: FontStyle.italic,
+                    ),
+                    maxLines: 3,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            )
+          else
+            Container(
+              margin: const EdgeInsets.symmetric(horizontal: 20),
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+              decoration: BoxDecoration(
+                color: Colors.white.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: Colors.white.withOpacity(0.2)),
+              ),
+              child: GestureDetector(
+                onTap: () => _showEditProfileDialog(context),
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Icon(
+                      Icons.add_circle_outline,
+                      color: Colors.white.withOpacity(0.8),
+                      size: 16,
+                    ),
+                    const SizedBox(width: 8),
+                    Text(
+                      'Tambahkan Bio Anda',
+                      style: TextStyle(
+                        color: Colors.white.withOpacity(0.9),
+                        fontSize: 14,
+                        fontStyle: FontStyle.italic,
+                      ),
+                    ),
+                  ],
                 ),
               ),
-              const SizedBox(width: 8),
-              Container(
-                padding: const EdgeInsets.symmetric(
-                  horizontal: 12,
-                  vertical: 6,
-                ),
-                decoration: BoxDecoration(
-                  color: _currentUser.isVerified == true
-                      ? Colors.green.withOpacity(0.2)
-                      : Colors.orange.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(20),
-                  border: Border.all(
-                    color: _currentUser.isVerified == true
-                        ? Colors.green.withOpacity(0.3)
-                        : Colors.orange.withOpacity(0.3),
-                  ),
-                ),
-                child: Text(
-                  _currentUser.isVerified == true
-                      ? 'TERVERIFIKASI'
-                      : 'BELUM TERVERIFIKASI',
-                  style: TextStyle(
-                    color: _currentUser.isVerified == true
-                        ? Colors.green.shade100
-                        : Colors.orange.shade100,
-                    fontSize: 12,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
-            ],
-          ),
+            ),
+
+          const SizedBox(height: 16),
+
           // Progress bar kelengkapan profil
           if (completionPercentage < 100) ...[
-            const SizedBox(height: 16),
             Container(
               width: double.infinity,
               padding: const EdgeInsets.all(12),
@@ -857,7 +885,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     try {
-      setState(() => _isLoading = true);
 
       // Ambil URL dokumen KK dari server
       final kkData = await ProfileService.getKKDocument();
@@ -1275,7 +1302,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       _showErrorSnackbar('Gagal memuat dokumen KK: ${e.toString()}');
     } finally {
       if (mounted) {
-        setState(() => _isLoading = false);
       }
     }
   }
@@ -1752,6 +1778,85 @@ class _ProfileScreenState extends State<ProfileScreen> {
         (_currentUser.rtRw?.isNotEmpty ?? false) ||
         (_currentUser.kodePos?.isNotEmpty ?? false);
 
+        final hasAnyData =
+        (_currentUser.nik?.isNotEmpty == true) ||
+        (_currentUser.nomorTelepon?.isNotEmpty == true) ||
+        (_currentUser.alamat?.isNotEmpty == true) ||
+        (_currentUser.kota?.isNotEmpty == true) ||
+        (_currentUser.rtRw?.isNotEmpty == true) ||
+        (_currentUser.kodePos?.isNotEmpty == true) ||
+        (_currentUser.tempatLahir?.isNotEmpty == true) ||
+        (_currentUser.tanggalLahir != null);
+
+
+        if (!hasAnyData) {
+      // Tampilkan placeholder jika belum ada data
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.only(left: 8, bottom: 8),
+            child: Text(
+              'Informasi Personal',
+              style: TextStyle(
+                fontSize: 16,
+                fontWeight: FontWeight.w600,
+                color: Colors.blue.shade800,
+              ),
+            ),
+          ),
+          Card(
+            elevation: 3,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(16),
+            ),
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                children: [
+                  Icon(
+                    Icons.info_outline,
+                    color: Colors.grey.shade400,
+                    size: 40,
+                  ),
+                  const SizedBox(height: 12),
+                  const Text(
+                    'Belum ada informasi personal',
+                    style: TextStyle(fontSize: 14, color: Colors.grey),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'Klik "Edit Profil" untuk melengkapi data',
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
+                    textAlign: TextAlign.center,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 12),
+          SizedBox(
+            width: double.infinity,
+            child: ElevatedButton.icon(
+              onPressed: () => _showEditProfileDialog(context),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.orange.shade50,
+                foregroundColor: Colors.orange.shade700,
+                elevation: 0,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
+                  side: BorderSide(color: Colors.orange.shade200),
+                ),
+              ),
+              icon: const Icon(Icons.edit, size: 16),
+              label: const Text('Lengkapi Informasi Personal'),
+            ),
+          ),
+        ],
+      );
+    }
+
+    // Kode asal untuk menampilkan data jika ada
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -2310,21 +2415,21 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       () => _isUpdatingProfile = true,
                                     );
 
-                                    // Buat object update
-                                    final updatedUser = _currentUser.copyWith(
-                                      name: nameController.text.trim(),
-                                      phone: phoneController.text.trim(),
-                                      alamat: addressController.text.trim(),
-                                      kota: cityController.text.trim(),
-                                      rtRw: rtRwController.text.trim(),
-                                      kodePos: kodePosController.text.trim(),
-                                      bio: bioController.text.trim(),
-                                      nik: nikController.text.trim(),
-                                      tempatLahir: tempatLahirController.text
-                                          .trim(),
-                                    );
-
                                     try {
+                                      // Buat object update
+                                      final updatedUser = _currentUser.copyWith(
+                                        name: nameController.text.trim(),
+                                        phone: phoneController.text.trim(),
+                                        alamat: addressController.text.trim(),
+                                        kota: cityController.text.trim(),
+                                        rtRw: rtRwController.text.trim(),
+                                        kodePos: kodePosController.text.trim(),
+                                        bio: bioController.text.trim(),
+                                        nik: nikController.text.trim(),
+                                        tempatLahir: tempatLahirController.text
+                                            .trim(),
+                                      );
+
                                       // Panggil service update profile
                                       final result =
                                           await ProfileService.updateProfile(
@@ -2353,13 +2458,23 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                       }
 
                                       // Tutup dialog setelah sukses
-                                      if (mounted) Navigator.pop(context);
+                                      if (mounted) {
+                                        Navigator.pop(context);
+                                      }
                                     } catch (e) {
                                       print('❌ Error updating profile: $e');
                                       _showErrorSnackbar(
                                         'Gagal memperbarui profil: ${e.toString()}',
                                       );
+
                                       // Matikan loading state jika error
+                                      if (mounted) {
+                                        setDialogState(
+                                          () => _isUpdatingProfile = false,
+                                        );
+                                      }
+                                    } finally {
+                                      // PASTIKAN loading di-reset meskipun sukses
                                       if (mounted) {
                                         setDialogState(
                                           () => _isUpdatingProfile = false,
@@ -2654,151 +2769,152 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _showKKStatusDetail(BuildContext context) {
-  if (_kkStatus == null || _kkStatus!.isEmpty) {
-    _showErrorSnackbar('Data status KK tidak tersedia');
-    return;
-  }
+    if (_kkStatus == null || _kkStatus!.isEmpty) {
+      _showErrorSnackbar('Data status KK tidak tersedia');
+      return;
+    }
 
-  final status = _kkStatus?['kkVerificationStatus']?.toString() ?? 'not_uploaded';
-  final rejectionReason = _kkStatus?['kkRejectionReason']?.toString();
-  final verifiedAt = _kkStatus?['kkVerifiedAt']?.toString();
-  _kkStatus?['kkVerifiedBy']?.toString();
+    final status =
+        _kkStatus?['kkVerificationStatus']?.toString() ?? 'not_uploaded';
+    final rejectionReason = _kkStatus?['kkRejectionReason']?.toString();
+    final verifiedAt = _kkStatus?['kkVerifiedAt']?.toString();
+    _kkStatus?['kkVerifiedBy']?.toString();
 
-  showDialog(
-    context: context,
-    builder: (context) => AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: const Text('Detail Verifikasi KK'),
-      content: SingleChildScrollView(
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            _buildKKDetailItem(
-              'Status',
-              _getKKStatusText(status),
-              color: _getStatusColor(status),
-            ),
-            
-            if (verifiedAt != null && verifiedAt.isNotEmpty)
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Detail Verifikasi KK'),
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
               _buildKKDetailItem(
-                'Diverifikasi pada',
-                _formatDateTime(verifiedAt),
+                'Status',
+                _getKKStatusText(status),
+                color: _getStatusColor(status),
               ),
-            
-            if (rejectionReason != null && rejectionReason.isNotEmpty)
-              _buildKKDetailItem(
-                'Alasan Penolakan',
-                rejectionReason,
-                color: Colors.red.shade600,
-              ),
-            
-            // Tambahkan petunjuk berdasarkan status
-            if (status == 'not_uploaded') ...[
-              const SizedBox(height: 16),
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade50,
-                  borderRadius: BorderRadius.circular(8),
+
+              if (verifiedAt != null && verifiedAt.isNotEmpty)
+                _buildKKDetailItem(
+                  'Diverifikasi pada',
+                  _formatDateTime(verifiedAt),
                 ),
-                child: Row(
-                  children: [
-                    Icon(Icons.info, color: Colors.blue.shade600, size: 16),
-                    const SizedBox(width: 8),
-                    Expanded(
-                      child: Text(
-                        'Silakan upload dokumen KK untuk verifikasi',
-                        style: TextStyle(
-                          color: Colors.blue.shade800,
-                          fontSize: 12,
+
+              if (rejectionReason != null && rejectionReason.isNotEmpty)
+                _buildKKDetailItem(
+                  'Alasan Penolakan',
+                  rejectionReason,
+                  color: Colors.red.shade600,
+                ),
+
+              // Tambahkan petunjuk berdasarkan status
+              if (status == 'not_uploaded') ...[
+                const SizedBox(height: 16),
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: Colors.blue.shade50,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Row(
+                    children: [
+                      Icon(Icons.info, color: Colors.blue.shade600, size: 16),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: Text(
+                          'Silakan upload dokumen KK untuk verifikasi',
+                          style: TextStyle(
+                            color: Colors.blue.shade800,
+                            fontSize: 12,
+                          ),
                         ),
                       ),
-                    ),
-                  ],
+                    ],
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Tutup', style: TextStyle(color: Colors.grey.shade600)),
+          ),
+          if (status == 'rejected' || status == 'not_uploaded')
+            ElevatedButton(
+              onPressed: () {
+                Navigator.pop(context);
+                _showUploadKKDialog(context);
+              },
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.blue.shade600,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(12),
                 ),
               ),
-            ],
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text('Tutup', style: TextStyle(color: Colors.grey.shade600)),
-        ),
-        if (status == 'rejected' || status == 'not_uploaded')
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _showUploadKKDialog(context);
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue.shade600,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
+              child: const Text('Upload Ulang'),
             ),
-            child: const Text('Upload Ulang'),
-          ),
-      ],
-    ),
-  );
-}
-
-Widget _buildKKDetailItem(String label, String value, {Color? color}) {
-  return Padding(
-    padding: const EdgeInsets.symmetric(vertical: 8),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          label,
-          style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 14,
-            fontWeight: FontWeight.w500,
-            color: color ?? Colors.grey.shade800,
-          ),
-        ),
-      ],
-    ),
-  );
-}
-
-String _getKKStatusText(String status) {
-  switch (status) {
-    case 'verified':
-      return 'Terverifikasi ✅';
-    case 'rejected':
-      return 'Ditolak ❌';
-    case 'pending_review':
-      return 'Menunggu Verifikasi ⏳';
-    case 'not_uploaded':
-      return 'Belum Upload Dokumen 📄';
-    default:
-      return status;
+        ],
+      ),
+    );
   }
-}
 
-Color _getStatusColor(String status) {
-  switch (status) {
-    case 'verified':
-      return Colors.green.shade600;
-    case 'rejected':
-      return Colors.red.shade600;
-    case 'pending_review':
-      return Colors.orange.shade600;
-    case 'not_uploaded':
-      return Colors.grey.shade600;
-    default:
-      return Colors.grey.shade800;
+  Widget _buildKKDetailItem(String label, String value, {Color? color}) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            label,
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w500,
+              color: color ?? Colors.grey.shade800,
+            ),
+          ),
+        ],
+      ),
+    );
   }
-}
+
+  String _getKKStatusText(String status) {
+    switch (status) {
+      case 'verified':
+        return 'Terverifikasi ✅';
+      case 'rejected':
+        return 'Ditolak ❌';
+      case 'pending_review':
+        return 'Menunggu Verifikasi ⏳';
+      case 'not_uploaded':
+        return 'Belum Upload Dokumen 📄';
+      default:
+        return status;
+    }
+  }
+
+  Color _getStatusColor(String status) {
+    switch (status) {
+      case 'verified':
+        return Colors.green.shade600;
+      case 'rejected':
+        return Colors.red.shade600;
+      case 'pending_review':
+        return Colors.orange.shade600;
+      case 'not_uploaded':
+        return Colors.grey.shade600;
+      default:
+        return Colors.grey.shade800;
+    }
+  }
 
   void _showNotificationSettings(BuildContext context) {
     showModalBottomSheet(
@@ -2886,158 +3002,692 @@ Color _getStatusColor(String status) {
   }
 
   void _showHelpSupport(BuildContext context) {
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (context) {
-        return Container(
-          height: MediaQuery.of(context).size.height * 0.8,
-          decoration: const BoxDecoration(
-            color: Colors.white,
-            borderRadius: BorderRadius.only(
-              topLeft: Radius.circular(24),
-              topRight: Radius.circular(24),
-            ),
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (context) {
+      return Container(
+        height: MediaQuery.of(context).size.height * 0.9,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(24),
+            topRight: Radius.circular(24),
           ),
-          child: Column(
-            children: [
-              Container(
-                padding: const EdgeInsets.all(20),
-                decoration: BoxDecoration(
-                  color: Colors.blue.shade600,
-                  borderRadius: const BorderRadius.only(
-                    topLeft: Radius.circular(24),
-                    topRight: Radius.circular(24),
-                  ),
-                ),
-                child: Row(
-                  children: [
-                    IconButton(
-                      icon: const Icon(
-                        Icons.close,
-                        color: Colors.white,
-                        size: 24,
-                      ),
-                      onPressed: () => Navigator.pop(context),
-                    ),
-                    const SizedBox(width: 8),
-                    const Text(
-                      'Bantuan & Dukungan',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
+        ),
+        child: Column(
+          children: [
+            // Header
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade700,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(24),
+                  topRight: Radius.circular(24),
                 ),
               ),
-              Expanded(
-                child: Padding(
-                  padding: const EdgeInsets.all(20),
-                  child: Column(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
                     children: [
-                      _buildHelpOption(
-                        Icons.contact_support,
-                        'Hubungi Kami',
-                        'Kontak customer service',
-                        () => _showContactDialog(context),
+                      const Text(
+                        'Bantuan & Dukungan',
+                        style: TextStyle(
+                          fontSize: 24,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                        ),
                       ),
-                      const SizedBox(height: 12),
-                      _buildHelpOption(
-                        Icons.chat_bubble_outline,
-                        'Chat Langsung',
-                        'Dapatkan bantuan instan',
-                        () => _showLiveChat(context),
-                      ),
-                      const SizedBox(height: 12),
-                      _buildHelpOption(
-                        Icons.help_center,
-                        'FAQ',
-                        'Pertanyaan yang sering diajukan',
-                        () => _showFAQ(context),
-                      ),
-                      const SizedBox(height: 12),
-                      _buildHelpOption(
-                        Icons.bug_report,
-                        'Laporkan Masalah',
-                        'Kirim laporan bug atau masalah',
-                        () => _showReportProblem(context),
+                      IconButton(
+                        icon: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: Colors.white.withOpacity(0.2),
+                            shape: BoxShape.circle,
+                          ),
+                          child: const Icon(
+                            Icons.close,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                        ),
+                        onPressed: () => Navigator.pop(context),
                       ),
                     ],
                   ),
+                  const SizedBox(height: 8),
+                  const Text(
+                    'Dapatkan bantuan untuk menggunakan aplikasi Warga',
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 14,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // Content
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  children: [
+                    // Quick Access Cards
+                    const Text(
+                      'Akses Cepat',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    Row(
+                      children: [
+                        Expanded(
+                          child: _buildQuickActionCard(
+                            Icons.phone_in_talk,
+                            'Telepon',
+                            'Hubungi customer service',
+                            Colors.green.shade50,
+                            Colors.green.shade600,
+                            () => _makePhoneCall("+623417890123"),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: _buildQuickActionCard(
+                            Icons.chat_bubble,
+                            'Chat',
+                            'Bantuan instan via chat',
+                            Colors.blue.shade50,
+                            Colors.blue.shade600,
+                            () => _startLiveChat(context),
+                          ),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 12),
+
+                    // Bantuan Sections
+                    const SizedBox(height: 24),
+                    const Text(
+                      'Bantuan Berdasarkan Kategori',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.black87,
+                      ),
+                    ),
+                    const SizedBox(height: 16),
+
+                    _buildHelpCategory(
+                      'Akun & Profil',
+                      [
+                        'Cara mengedit profil',
+                        'Cara upload dokumen KK',
+                        'Cara reset password',
+                        'Cara verifikasi email',
+                        'Masalah login',
+                      ],
+                      Icons.person,
+                      Colors.blue.shade600,
+                      () => _showAccountHelp(context),
+                    ),
+                    const SizedBox(height: 16),
+
+                    _buildHelpCategory(
+                      'Dokumen & Verifikasi',
+                      [
+                        'Persyaratan upload KK',
+                        'Status verifikasi dokumen',
+                        'Dokumen ditolak',
+                        'Cara upload ulang',
+                        'Masa berlaku verifikasi',
+                      ],
+                      Icons.description,
+                      Colors.green.shade600,
+                      () => _showDocumentHelp(context),
+                    ),
+                    const SizedBox(height: 16),
+
+                    _buildHelpCategory(
+                      'Aplikasi & Teknis',
+                      [
+                        'Aplikasi crash/error',
+                        'Notifikasi tidak muncul',
+                        'Update aplikasi',
+                        'Masalah internet',
+                        'Keluhan performa',
+                      ],
+                      Icons.smartphone,
+                      Colors.orange.shade600,
+                      () => _showTechnicalHelp(context),
+                    ),
+                    const SizedBox(height: 16),
+
+                    _buildHelpCategory(
+                      'Keamanan & Privasi',
+                      [
+                        'Keamanan akun',
+                        'Laporan aktivitas mencurigakan',
+                        'Reset password',
+                        'Data pribadi',
+                        'Hapus akun',
+                      ],
+                      Icons.security,
+                      Colors.purple.shade600,
+                      () => _showSecurityHelp(context),
+                    ),
+
+                    // FAQ Section
+                    const SizedBox(height: 32),
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.blue.shade100),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Row(
+                            children: [
+                              Icon(
+                                Icons.question_answer,
+                                color: Colors.blue.shade700,
+                                size: 24,
+                              ),
+                              const SizedBox(width: 12),
+                              const Text(
+                                'Pertanyaan Umum (FAQ)',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                  color: Colors.black87,
+                                ),
+                              ),
+                            ],
+                          ),
+                          const SizedBox(height: 12),
+                          _buildFAQItem(
+                            'Bagaimana cara verifikasi akun?',
+                            'Verifikasi dilakukan melalui upload dokumen KK. Dokumen akan diverifikasi oleh admin dalam 1-3 hari kerja.',
+                          ),
+                          _buildFAQItem(
+                            'Berapa lama proses verifikasi KK?',
+                            'Proses verifikasi biasanya memakan waktu 1-3 hari kerja. Anda akan mendapat notifikasi saat status berubah.',
+                          ),
+                          _buildFAQItem(
+                            'Apa yang harus dilakukan jika dokumen ditolak?',
+                            'Periksa alasan penolakan di profil > status KK. Upload ulang dengan dokumen yang lebih jelas dan sesuai persyaratan.',
+                          ),
+                          const SizedBox(height: 12),
+                          Align(
+                            alignment: Alignment.centerRight,
+                            child: TextButton(
+                              onPressed: () => _showFullFAQ(context),
+                              child: Text(
+                                'Lihat FAQ Lengkap →',
+                                style: TextStyle(
+                                  color: Colors.blue.shade700,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Contact Information
+                    const SizedBox(height: 32),
+                    Container(
+                      padding: const EdgeInsets.all(20),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade50,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: Colors.grey.shade200),
+                      ),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            '📞 Kontak Resmi',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.black87,
+                            ),
+                          ),
+                          const SizedBox(height: 12),
+                          _buildContactInfoRow(
+                            Icons.phone,
+                            'Customer Service',
+                            '(0341) 789-0123',
+                            Colors.green.shade700,
+                          ),
+                          _buildContactInfoRow(
+                            Icons.email,
+                            'Email Support',
+                            'support@wargaapp.com',
+                            Colors.blue.shade700,
+                          ),
+                          _buildContactInfoRow(
+                            Icons.chat_bubble,
+                            'WhatsApp',
+                            '+62 812-3456-7890',
+                            Colors.green.shade700,
+                          ),
+                          _buildContactInfoRow(
+                            Icons.location_on,
+                            'Alamat Kantor',
+                            'Jl. Danau Ranau II, Malang',
+                            Colors.orange.shade700,
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Operating Hours
+                    const SizedBox(height: 16),
+                    Container(
+                      padding: const EdgeInsets.all(16),
+                      decoration: BoxDecoration(
+                        color: Colors.amber.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.amber.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.access_time,
+                            color: Colors.amber.shade700,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  '🕐 Jam Operasional',
+                                  style: TextStyle(
+                                    color: Colors.amber.shade800,
+                                    fontWeight: FontWeight.w600,
+                                  ),
+                                ),
+                                const SizedBox(height: 4),
+                                const Text(
+                                  'Senin - Jumat: 08.00 - 17.00 WIB\nSabtu: 08.00 - 12.00 WIB',
+                                  style: TextStyle(fontSize: 12),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Report Problem Button
+                    const SizedBox(height: 32),
+                    ElevatedButton.icon(
+                      onPressed: () => _showReportProblemDialog(context),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red.shade50,
+                        foregroundColor: Colors.red.shade700,
+                        minimumSize: const Size(double.infinity, 56),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(color: Colors.red.shade200),
+                        ),
+                      ),
+                      icon: const Icon(Icons.bug_report),
+                      label: const Text(
+                        'Laporkan Masalah atau Bug',
+                        style: TextStyle(fontWeight: FontWeight.w600),
+                      ),
+                    ),
+
+                    const SizedBox(height: 40),
+                  ],
                 ),
               ),
-            ],
-          ),
-        );
-      },
-    );
-  }
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}
 
-  Widget _buildHelpOption(
-    IconData icon,
-    String title,
-    String subtitle,
-    VoidCallback onTap,
-  ) {
-    return Card(
-      elevation: 2,
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-      child: ListTile(
-        leading: Container(
-          width: 44,
-          height: 44,
-          decoration: BoxDecoration(
-            color: Colors.blue.shade50,
-            shape: BoxShape.circle,
-          ),
-          child: Icon(icon, color: Colors.blue.shade600, size: 22),
-        ),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w500)),
-        subtitle: Text(subtitle, style: TextStyle(color: Colors.grey.shade600)),
-        trailing: Icon(
-          Icons.arrow_forward_ios,
-          size: 16,
-          color: Colors.grey.shade400,
-        ),
-        onTap: onTap,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+// Helper Methods untuk Bantuan & Dukungan
+
+Widget _buildQuickActionCard(
+  IconData icon,
+  String title,
+  String subtitle,
+  Color bgColor,
+  Color iconColor,
+  VoidCallback onTap,
+) {
+  return GestureDetector(
+    onTap: onTap,
+    child: Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: bgColor,
+        borderRadius: BorderRadius.circular(16),
+        border: Border.all(color: bgColor.withOpacity(0.3)),
       ),
-    );
-  }
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(12),
+            decoration: BoxDecoration(
+              color: iconColor.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: iconColor, size: 24),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.w600,
+              color: Colors.grey.shade800,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            subtitle,
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 11,
+              color: Colors.grey.shade600,
+            ),
+          ),
+        ],
+      ),
+    ),
+  );
+}
 
-  void _showContactDialog(BuildContext context) {
+Widget _buildHelpCategory(
+  String title,
+  List<String> topics,
+  IconData icon,
+  Color color,
+  VoidCallback onTap,
+) {
+  return Card(
+    elevation: 2,
+    shape: RoundedRectangleBorder(
+      borderRadius: BorderRadius.circular(16),
+      side: BorderSide(color: Colors.grey.shade100),
+    ),
+    child: ListTile(
+      onTap: onTap,
+      leading: Container(
+        width: 50,
+        height: 50,
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+        ),
+        child: Icon(icon, color: color, size: 24),
+      ),
+      title: Text(
+        title,
+        style: const TextStyle(
+          fontWeight: FontWeight.w600,
+          fontSize: 16,
+        ),
+      ),
+      subtitle: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const SizedBox(height: 4),
+          Wrap(
+            spacing: 6,
+            runSpacing: 4,
+            children: topics
+                .map((topic) => Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 8,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.grey.shade100,
+                        borderRadius: BorderRadius.circular(6),
+                      ),
+                      child: Text(
+                        topic,
+                        style: TextStyle(
+                          fontSize: 10,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                    ))
+                .toList(),
+          ),
+        ],
+      ),
+      trailing: Icon(
+        Icons.arrow_forward_ios,
+        size: 16,
+        color: Colors.grey.shade400,
+      ),
+      contentPadding: const EdgeInsets.symmetric(
+        horizontal: 16,
+        vertical: 12,
+      ),
+    ),
+  );
+}
+
+Widget _buildFAQItem(String question, String answer) {
+  return ExpansionTile(
+    tilePadding: EdgeInsets.zero,
+    title: Text(
+      question,
+      style: TextStyle(
+        fontWeight: FontWeight.w500,
+        color: Colors.grey.shade800,
+      ),
+    ),
+    children: [
+      Padding(
+        padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
+        child: Text(
+          answer,
+          style: TextStyle(color: Colors.grey.shade600),
+        ),
+      ),
+    ],
+  );
+}
+
+Widget _buildContactInfoRow(
+  IconData icon,
+  String title,
+  String value,
+  Color color,
+) {
+  return Padding(
+    padding: const EdgeInsets.symmetric(vertical: 8),
+    child: Row(
+      children: [
+        Icon(icon, color: color, size: 18),
+        const SizedBox(width: 12),
+        Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 12,
+                color: Colors.grey.shade600,
+              ),
+            ),
+            Text(
+              value,
+              style: const TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w500,
+                color: Colors.black87,
+              ),
+            ),
+          ],
+        ),
+        const Spacer(),
+        IconButton(
+          icon: Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.1),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(
+              Icons.content_copy,
+              size: 14,
+              color: color,
+            ),
+          ),
+          onPressed: () async {
+            await Clipboard.setData(ClipboardData(text: value));
+            _showSuccessSnackbar('Disalin: $value');
+          },
+        ),
+      ],
+    ),
+  );
+}
+
+// Fungsi-fungsi untuk berbagai bantuan
+
+void _showAccountHelp(BuildContext context) {
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: const Text('Bantuan Akun & Profil'),
+      content: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildHelpStep('1. Edit Profil', 'Klik menu "Edit Profil" di halaman profil Anda'),
+            _buildHelpStep('2. Upload Foto', 'Pastikan foto jelas, ukuran maksimal 5MB'),
+            _buildHelpStep('3. Reset Password', 'Gunakan fitur "Lupa Password" di halaman login'),
+            _buildHelpStep('4. Verifikasi Email', 'Cek email Anda untuk link verifikasi'),
+            const SizedBox(height: 16),
+            const Text(
+              'Masih butuh bantuan? Hubungi customer service kami.',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Tutup'),
+        ),
+        ElevatedButton(
+          onPressed: () => _makePhoneCall("+623417890123"),
+          child: const Text('Hubungi CS'),
+        ),
+      ],
+    ),
+  );
+}
+
+void _showContactDialog(BuildContext context) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         title: const Text('Hubungi Kami'),
-        content: const Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text('📞 Customer Service: 1500-123'),
-            SizedBox(height: 8),
-            Text('📧 Email: support@communityapp.com'),
-            SizedBox(height: 8),
-            Text('💬 WhatsApp: +62 812-3456-7890'),
-            SizedBox(height: 16),
-            Text('🕐 Jam Operasional:'),
-            Text('Senin - Jumat: 08.00 - 17.00 WIB'),
-            Text('Sabtu: 08.00 - 12.00 WIB'),
-          ],
+        content: SingleChildScrollView(
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              _buildContactItem(
+                Icons.phone,
+                'Customer Service',
+                '(0341) 789-0123',
+                Colors.green.shade700,
+                () => _makePhoneCall('+623417890123'),
+              ),
+              const SizedBox(height: 12),
+              _buildContactItem(
+                Icons.email,
+                'Email Support',
+                'support@wargaapp.com',
+                Colors.blue.shade700,
+                () => _sendEmail('support@wargaapp.com'),
+              ),
+              const SizedBox(height: 12),
+              _buildContactItem(
+                Icons.chat_bubble,
+                'WhatsApp',
+                '+62 812-3456-7890',
+                Colors.green.shade600,
+                () => _openWhatsApp('+6281234567890'),
+              ),
+              const SizedBox(height: 12),
+              _buildContactItem(
+                Icons.location_on,
+                'Alamat Kantor',
+                'Jl. Danau Ranau II, Malang',
+                Colors.orange.shade700,
+                () => _openMaps(),
+              ),
+              const SizedBox(height: 20),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Column(
+                  children: [
+                    const Text(
+                      '🕐 Jam Operasional',
+                      style: TextStyle(fontWeight: FontWeight.w600),
+                    ),
+                    const SizedBox(height: 4),
+                    const Text(
+                      'Senin - Jumat: 08.00 - 17.00 WIB\nSabtu: 08.00 - 12.00 WIB',
+                      textAlign: TextAlign.center,
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Respon rata-rata: 2-4 jam',
+                      style: TextStyle(
+                        color: Colors.grey.shade600,
+                        fontSize: 12,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
         ),
         actions: [
-          ElevatedButton(
+          TextButton(
             onPressed: () => Navigator.pop(context),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue.shade600,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
             child: const Text('Tutup'),
           ),
         ],
@@ -3045,165 +3695,2170 @@ Color _getStatusColor(String status) {
     );
   }
 
-  void _showLiveChat(BuildContext context) {
-    _showSuccessSnackbar('Membuka chat langsung...');
-  }
-
-  void _showFAQ(BuildContext context) {
-    _showSuccessSnackbar('Membuka FAQ...');
-  }
-
-  void _showReportProblem(BuildContext context) {
-    final problemController = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Laporkan Masalah'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text('Jelaskan masalah yang Anda alami:'),
-            const SizedBox(height: 12),
-            TextField(
-              controller: problemController,
-              decoration: InputDecoration(
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                hintText: 'Deskripsikan masalah Anda...',
-              ),
-              maxLines: 4,
-            ),
-          ],
+  Widget _buildContactItem(
+    IconData icon,
+    String title,
+    String value,
+    Color color,
+    VoidCallback onTap,
+  ) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(12),
+        decoration: BoxDecoration(
+          color: Colors.grey.shade50,
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: Colors.grey.shade200),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Batal', style: TextStyle(color: Colors.grey.shade600)),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              if (problemController.text.isNotEmpty) {
-                _showSuccessSnackbar('Laporan masalah berhasil dikirim');
-                Navigator.pop(context);
-              } else {
-                _showErrorSnackbar('Harap isi deskripsi masalah');
-              }
-            },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue.shade600,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
-              ),
-            ),
-            child: const Text('Kirim Laporan'),
-          ),
-        ],
-      ),
-    );
-  }
-
-  void _showPrivacyPolicy(BuildContext context) {
-    _showInfoDialog(
-      context,
-      'Kebijakan Privasi',
-      'Aplikasi Community App menghargai privasi Anda. Data yang kami kumpulkan digunakan untuk:'
-          '\n\n• Memperbaiki pengalaman pengguna'
-          '\n• Menyediakan layanan yang diminta'
-          '\n• Komunikasi penting terkait layanan'
-          '\n• Analisis dan pengembangan fitur'
-          '\n\nKami tidak akan membagikan data pribadi Anda kepada pihak ketiga tanpa persetujuan.'
-          '\n\nTerakhir diperbarui: 1 Desember 2024',
-    );
-  }
-
-  void _showTermsConditions(BuildContext context) {
-    _showInfoDialog(
-      context,
-      'Syarat & Ketentuan',
-      'Dengan menggunakan aplikasi Community App, Anda menyetujui:'
-          '\n\n• Menggunakan aplikasi sesuai dengan peraturan yang berlaku'
-          '\n• Tidak menyebarkan konten yang melanggar hukum'
-          '\n• Bertanggung jawab atas konten yang diunggah'
-          '\n• Menghormati privasi pengguna lain'
-          '\n• Mengikuti panduan komunitas yang telah ditetapkan'
-          '\n\nPelanggaran terhadap syarat dan ketentuan dapat mengakibatkan pembatasan akses.'
-          '\n\nTerakhir diperbarui: 1 Desember 2024',
-    );
-  }
-
-  void _showRatingDialog(BuildContext context) {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
+        child: Row(
           children: [
             Container(
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
-                color: Colors.amber.shade50,
+                color: color.withOpacity(0.1),
                 shape: BoxShape.circle,
               ),
-              child: Icon(Icons.star, color: Colors.amber.shade600),
+              child: Icon(icon, color: color, size: 20),
             ),
             const SizedBox(width: 12),
-            const Text(
-              'Beri Rating',
-              style: TextStyle(fontWeight: FontWeight.bold),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    title,
+                    style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+                  ),
+                  Text(
+                    value,
+                    style: const TextStyle(
+                      fontSize: 14,
+                      fontWeight: FontWeight.w500,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            IconButton(
+              icon: Container(
+                padding: const EdgeInsets.all(6),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.1),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.content_copy, size: 16, color: color),
+              ),
+              onPressed: () async {
+                await Clipboard.setData(ClipboardData(text: value));
+                _showSuccessSnackbar('Disalin: $value');
+              },
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  // Helper methods untuk kontak
+  Future<void> _makePhoneCall(String phoneNumber) async {
+    final url = 'tel:$phoneNumber';
+    if (await canLaunchUrl(Uri.parse(url))) {
+      await launchUrl(Uri.parse(url));
+    } else {
+      _showErrorSnackbar('Tidak dapat membuka aplikasi telepon');
+    }
+  }
+
+  Future<void> _sendEmail(String email) async {
+    final url = 'mailto:$email';
+    if (await canLaunchUrl(Uri.parse(url))) {
+      await launchUrl(Uri.parse(url));
+    } else {
+      _showErrorSnackbar('Tidak dapat membuka aplikasi email');
+    }
+  }
+
+  Future<void> _openWhatsApp(String phoneNumber) async {
+    // Format nomor WhatsApp (hapus tanda + dan spasi)
+    final formattedNumber = phoneNumber.replaceAll(RegExp(r'[+\s]'), '');
+    final url = 'https://wa.me/$formattedNumber';
+
+    if (await canLaunchUrl(Uri.parse(url))) {
+      await launchUrl(Uri.parse(url));
+    } else {
+      _showErrorSnackbar('Tidak dapat membuka WhatsApp');
+    }
+  }
+
+  Future<void> _openMaps() async {
+    const address = 'Jl. Danau Ranau II, Malang';
+    final url = Uri.encodeFull('https://maps.google.com/?q=$address');
+
+    if (await canLaunchUrl(Uri.parse(url))) {
+      await launchUrl(Uri.parse(url));
+    } else {
+      _showErrorSnackbar('Tidak dapat membuka aplikasi maps');
+    }
+  }
+
+void _showDocumentHelp(BuildContext context) {
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: const Text('Bantuan Dokumen & Verifikasi'),
+      content: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              '📋 Persyaratan Dokumen KK:',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            _buildBulletPoint('Format: JPG, PNG, atau PDF'),
+            _buildBulletPoint('Maksimal 5MB'),
+            _buildBulletPoint('Foto jelas, semua informasi terbaca'),
+            _buildBulletPoint('Dokumen masih berlaku'),
+            const SizedBox(height: 12),
+            const Text(
+              '⏱️ Timeline Verifikasi:',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            _buildBulletPoint('Review awal: 1-2 jam'),
+            _buildBulletPoint('Verifikasi lengkap: 1-3 hari kerja'),
+            _buildBulletPoint('Notifikasi real-time saat status berubah'),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.orange.shade50,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Text(
+                'Pastikan dokumen asli siap untuk verifikasi offline jika diperlukan',
+                style: TextStyle(fontSize: 12),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Tutup'),
+        ),
+        ElevatedButton(
+          onPressed: () => _showUploadKKDialog(context),
+          child: const Text('Upload KK'),
+        ),
+      ],
+    ),
+  );
+}
+
+void _showTechnicalHelp(BuildContext context) {
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: const Text('Bantuan Teknis'),
+      content: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            _buildTroubleshootingStep(
+              'Aplikasi crash/error',
+              '1. Tutup aplikasi\n2. Clear cache\n3. Update aplikasi\n4. Restart perangkat',
+            ),
+            _buildTroubleshootingStep(
+              'Notifikasi tidak muncul',
+              '1. Cek pengaturan notifikasi\n2. Pastikan koneksi internet\n3. Update aplikasi',
+            ),
+            _buildTroubleshootingStep(
+              'Masalah internet',
+              '1. Restart WiFi/mobile data\n2. Cek sinyal\n3. Coba jaringan lain',
+            ),
+            const SizedBox(height: 16),
+            const Text(
+              'Informasi Aplikasi:',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            _buildBulletPoint('Versi: 1.0.0'),
+            _buildBulletPoint('Ukuran: ~50MB'),
+            _buildBulletPoint('OS Minimal: Android 8.0 / iOS 12'),
+            _buildBulletPoint('Terakhir Update: Desember 2024'),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Tutup'),
+        ),
+        ElevatedButton(
+          onPressed: () => _showReportProblemDialog(context),
+          child: const Text('Laporkan Masalah'),
+        ),
+      ],
+    ),
+  );
+}
+
+void _showSecurityHelp(BuildContext context) {
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+      title: const Text('Bantuan Keamanan & Privasi'),
+      content: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Text(
+              '🔒 Tips Keamanan Akun:',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            _buildBulletPoint('Gunakan password yang kuat'),
+            _buildBulletPoint('Jangan bagikan kredensial login'),
+            _buildBulletPoint('Logout dari perangkat bersama'),
+            _buildBulletPoint('Aktifkan verifikasi 2 langkah'),
+            const SizedBox(height: 12),
+            const Text(
+              '📝 Lapor Aktivitas Mencurigakan:',
+              style: TextStyle(fontWeight: FontWeight.w600),
+            ),
+            const Text(
+              'Jika Anda melihat aktivitas mencurigakan pada akun Anda:',
+              style: TextStyle(fontSize: 12),
+            ),
+            _buildBulletPoint('Segera ubah password'),
+            _buildBulletPoint('Hubungi customer service'),
+            _buildBulletPoint('Laporkan ke admin komunitas'),
+            const SizedBox(height: 16),
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: Colors.red.shade50,
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: const Text(
+                'Kami TIDAK PERNAH meminta password melalui telepon atau email. Hati-hati dengan phishing!',
+                style: TextStyle(fontSize: 12, color: Colors.red),
+              ),
+            ),
+          ],
+        ),
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Tutup'),
+        ),
+        TextButton(
+          onPressed: () => _showPrivacyPolicy(context),
+          child: const Text('Kebijakan Privasi'),
+        ),
+      ],
+    ),
+  );
+}
+
+void _showFullFAQ(BuildContext context) {
+  showModalBottomSheet(
+    context: context,
+    isScrollControlled: true,
+    backgroundColor: Colors.transparent,
+    builder: (context) {
+      return Container(
+        height: MediaQuery.of(context).size.height * 0.9,
+        decoration: const BoxDecoration(
+          color: Colors.white,
+          borderRadius: BorderRadius.only(
+            topLeft: Radius.circular(24),
+            topRight: Radius.circular(24),
+          ),
+        ),
+        child: Column(
+          children: [
+            // Header
+            Container(
+              padding: const EdgeInsets.all(24),
+              decoration: BoxDecoration(
+                color: Colors.blue.shade700,
+                borderRadius: const BorderRadius.only(
+                  topLeft: Radius.circular(24),
+                  topRight: Radius.circular(24),
+                ),
+              ),
+              child: Row(
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.arrow_back, color: Colors.white),
+                    onPressed: () => Navigator.pop(context),
+                  ),
+                  const SizedBox(width: 12),
+                  const Text(
+                    'FAQ Lengkap',
+                    style: TextStyle(
+                      fontSize: 20,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+
+            // FAQ Content
+            Expanded(
+              child: SingleChildScrollView(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  children: [
+                    _buildDetailedFAQItem(
+                      'Bagaimana cara mendaftar di Warga App?',
+                      'Pendaftaran dilakukan melalui undangan dari admin komunitas. Hubungi admin RT/RW setempat untuk mendapatkan kode pendaftaran.',
+                    ),
+                    _buildDetailedFAQItem(
+                      'Apa syarat menggunakan aplikasi?',
+                      '1. Warga yang tercatat di lingkungan tersebut\n2. Memiliki smartphone dengan internet\n3. Dokumen KK yang valid\n4. Email aktif',
+                    ),
+                    _buildDetailedFAQItem(
+                      'Apakah aplikasi ini gratis?',
+                      'Ya, aplikasi Warga App sepenuhnya gratis untuk digunakan oleh warga terdaftar.',
+                    ),
+                    _buildDetailedFAQItem(
+                      'Data saya aman tidak?',
+                      'Data Anda dilindungi dengan enkripsi tingkat tinggi dan hanya digunakan untuk keperluan layanan komunitas sesuai Kebijakan Privasi.',
+                    ),
+                    _buildDetailedFAQItem(
+                      'Bagaimana jika saya ganti nomor HP?',
+                      'Hubungi admin untuk update data. Anda perlu verifikasi ulang dengan nomor baru.',
+                    ),
+                    _buildDetailedFAQItem(
+                      'Apakah bisa digunakan di luar kota?',
+                      'Bisa, selama ada koneksi internet. Beberapa fitur mungkin memerlukan verifikasi lokasi.',
+                    ),
+                    _buildDetailedFAQItem(
+                      'Bagaimana cara hapus akun?',
+                      'Kirim permintaan ke admin melalui aplikasi atau hubungi customer service.',
+                    ),
+                    _buildDetailedFAQItem(
+                      'Aplikasi tidak bisa dibuka, kenapa?',
+                      '1. Pastikan sudah update ke versi terbaru\n2. Clear cache aplikasi\n3. Restart perangkat\n4. Cek koneksi internet',
+                    ),
+                    _buildDetailedFAQItem(
+                      'Notifikasi tidak muncul, solusinya?',
+                      '1. Cek pengaturan notifikasi di perangkat\n2. Pastikan aplikasi tidak di-force stop\n3. Update aplikasi ke versi terbaru',
+                    ),
+                    _buildDetailedFAQItem(
+                      'Kapan update fitur baru?',
+                      'Kami melakukan update rutin setiap bulan. Info update tersedia di pengumuman aplikasi.',
+                    ),
+                  ],
+                ),
+              ),
+            ),
+
+            
+
+            // Footer
+            Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                border: Border(top: BorderSide(color: Colors.grey.shade200)),
+              ),
+              child: ElevatedButton(
+                onPressed: () => _showContactDialog(context),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.blue.shade600,
+                  minimumSize: const Size(double.infinity, 50),
+                ),
+                child: const Text(
+                  'Butuh Bantuan Lebih Lanjut? Hubungi Kami',
+                  style: TextStyle(fontWeight: FontWeight.w600),
+                ),
+              ),
+            ),
+          ],
+        ),
+      );
+    },
+  );
+}
+
+Widget _buildHelpStep(String step, String description) {
+  return Padding(
+    padding: const EdgeInsets.symmetric(vertical: 8),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Container(
+          padding: const EdgeInsets.all(4),
+          decoration: BoxDecoration(
+            color: Colors.blue.shade100,
+            shape: BoxShape.circle,
+          ),
+          child: const Icon(Icons.check, size: 12, color: Colors.blue),
+        ),
+        const SizedBox(width: 12),
+        Expanded(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                step,
+                style: const TextStyle(fontWeight: FontWeight.w500),
+              ),
+              Text(
+                description,
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              ),
+            ],
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+Widget _buildBulletPoint(String text) {
+  return Padding(
+    padding: const EdgeInsets.symmetric(vertical: 2),
+    child: Row(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text('• ', style: TextStyle(fontSize: 16)),
+        Expanded(child: Text(text)),
+      ],
+    ),
+  );
+}
+
+Widget _buildTroubleshootingStep(String problem, String solution) {
+  return Container(
+    margin: const EdgeInsets.symmetric(vertical: 8),
+    padding: const EdgeInsets.all(12),
+    decoration: BoxDecoration(
+      color: Colors.grey.shade50,
+      borderRadius: BorderRadius.circular(8),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          problem,
+          style: const TextStyle(fontWeight: FontWeight.w500),
+        ),
+        const SizedBox(height: 4),
+        Text(
+          solution,
+          style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+        ),
+      ],
+    ),
+  );
+}
+
+Widget _buildDetailedFAQItem(String question, String answer) {
+  return Container(
+    margin: const EdgeInsets.only(bottom: 16),
+    padding: const EdgeInsets.all(16),
+    decoration: BoxDecoration(
+      color: Colors.grey.shade50,
+      borderRadius: BorderRadius.circular(12),
+      border: Border.all(color: Colors.grey.shade200),
+    ),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Icon(
+              Icons.help_outline,
+              color: Colors.blue.shade600,
+              size: 18,
+            ),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Text(
+                question,
+                style: const TextStyle(
+                  fontWeight: FontWeight.w600,
+                  fontSize: 15,
+                ),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 8),
+        Padding(
+          padding: const EdgeInsets.only(left: 26),
+          child: Text(
+            answer,
+            style: TextStyle(
+              color: Colors.grey.shade700,
+              fontSize: 14,
+              height: 1.5,
+            ),
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+// Fungsi-fungsi aksi
+
+// void _makePhoneCall(String phoneNumber) async {
+//   final Uri launchUri = Uri(
+//     scheme: 'tel',
+//     path: phoneNumber,
+//   );
+//   if (await canLaunchUrl(launchUri)) {
+//     await launchUrl(launchUri);
+//   } else {
+//     _showErrorSnackbar('Tidak dapat membuka aplikasi telepon');
+//   }
+// }
+
+void _startLiveChat(BuildContext context) {
+  // Implement live chat functionality
+  showDialog(
+    context: context,
+    builder: (context) => AlertDialog(
+      title: const Text('Chat Langsung'),
+      content: const Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.chat_bubble_outline, size: 60, color: Colors.blue),
+          SizedBox(height: 16),
+          Text(
+            'Fitur chat langsung akan segera hadir!',
+            textAlign: TextAlign.center,
+          ),
+          SizedBox(height: 8),
+          Text(
+            'Untuk sementara, hubungi kami via WhatsApp atau telepon.',
+            style: TextStyle(fontSize: 12, color: Colors.grey),
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: const Text('Tutup'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            Navigator.pop(context);
+            _makePhoneCall("+623417890123");
+          },
+          child: const Text('Telepon Sekarang'),
+        ),
+      ],
+    ),
+  );
+}
+
+void _showReportProblemDialog(BuildContext context) {
+  final problemController = TextEditingController();
+  String selectedCategory = 'Umum';
+  bool _isSubmitting = false;
+
+  showDialog(
+    context: context,
+    builder: (context) => StatefulBuilder(
+      builder: (context, setState) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+          ),
+          child: Container(
+            constraints: BoxConstraints(
+              maxHeight: MediaQuery.of(context).size.height * 0.8,
+            ),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header
+                Container(
+                  padding: const EdgeInsets.all(24),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade600,
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(20),
+                      topRight: Radius.circular(20),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      const Icon(Icons.bug_report, color: Colors.white, size: 28),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Laporkan Masalah',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close, color: Colors.white),
+                        onPressed: () => Navigator.pop(context),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Content
+                Expanded(
+                  child: SingleChildScrollView(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        const Text(
+                          'Kategori Masalah',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Wrap(
+                          spacing: 8,
+                          runSpacing: 8,
+                          children: [
+                            'Umum',
+                            'Teknis',
+                            'Akun',
+                            'Dokumen',
+                            'Notifikasi',
+                            'Lainnya',
+                          ].map((category) {
+                            return ChoiceChip(
+                              label: Text(category),
+                              selected: selectedCategory == category,
+                              onSelected: (selected) {
+                                setState(() => selectedCategory = category);
+                              },
+                            );
+                          }).toList(),
+                        ),
+                        const SizedBox(height: 24),
+
+                        const Text(
+                          'Deskripsi Masalah',
+                          style: TextStyle(
+                            fontWeight: FontWeight.w600,
+                            fontSize: 16,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        TextField(
+                          controller: problemController,
+                          maxLines: 5,
+                          decoration: InputDecoration(
+                            hintText:
+                                'Jelaskan masalah yang Anda alami secara detail...',
+                            border: OutlineInputBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Sertakan: perangkat, langkah reproduksi, waktu kejadian',
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: Colors.grey.shade600,
+                          ),
+                        ),
+
+                        const SizedBox(height: 24),
+
+                        Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: Colors.blue.shade50,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                '📸 Screenshot (Opsional)',
+                                style: TextStyle(fontWeight: FontWeight.w600),
+                              ),
+                              const SizedBox(height: 8),
+                              ElevatedButton.icon(
+                                onPressed: () async {
+                                  // Implement screenshot capture
+                                  _showSuccessSnackbar(
+                                    'Fitur screenshot akan datang',
+                                  );
+                                },
+                                icon: const Icon(Icons.camera_alt, size: 18),
+                                label: const Text('Ambil Screenshot'),
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.white,
+                                  foregroundColor: Colors.blue.shade700,
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                'Screenshot membantu kami memahami masalah lebih cepat',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+
+                        const SizedBox(height: 24),
+
+                        // System Info
+                        Container(
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.grey.shade100,
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'ℹ️ Informasi Sistem',
+                                style: TextStyle(fontWeight: FontWeight.w600),
+                              ),
+                              const SizedBox(height: 4),
+                              Text('Aplikasi: Warga App v1.0.0'),
+                              Text('Perangkat: ${Platform.operatingSystem}'),
+                              Text('Tanggal: ${DateTime.now().toLocal()}'),
+                            ],
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+
+                // Footer
+                Container(
+                  padding: const EdgeInsets.all(20),
+                  decoration: BoxDecoration(
+                    border: Border(top: BorderSide(color: Colors.grey.shade200)),
+                  ),
+                  child: _isSubmitting
+                      ? const CircularProgressIndicator()
+                      : Row(
+                          children: [
+                            Expanded(
+                              child: OutlinedButton(
+                                onPressed: () => Navigator.pop(context),
+                                child: const Text('Batal'),
+                              ),
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: ElevatedButton(
+                                onPressed: () async {
+                                  if (problemController.text.isEmpty) {
+                                    _showErrorSnackbar(
+                                      'Harap isi deskripsi masalah',
+                                    );
+                                    return;
+                                  }
+
+                                  setState(() => _isSubmitting = true);
+
+                                  // Simulate submission
+                                  await Future.delayed(
+                                    const Duration(seconds: 2),
+                                  );
+
+                                  _showSuccessSnackbar(
+                                    'Laporan berhasil dikirim. Kami akan segera menindaklanjuti.',
+                                  );
+                                  Navigator.pop(context);
+                                },
+                                style: ElevatedButton.styleFrom(
+                                  backgroundColor: Colors.red.shade600,
+                                ),
+                                child: const Text('Kirim Laporan'),
+                              ),
+                            ),
+                          ],
+                        ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    ),
+  );
+}
+
+ void _showPrivacyPolicy(BuildContext context) {
+    _showInfoDialog(context, 'Kebijakan Privasi Warga App', '''
+**TERAKHIR DIPERBARUI: 12 Desember 2024**
+**VERSI: 3.0**
+
+### **PENGANTAR**
+
+Selamat datang di Kebijakan Privasi Warga App ("Aplikasi"). Kebijakan ini menjelaskan bagaimana kami mengumpulkan, menggunakan, mengungkapkan, dan melindungi informasi pribadi Anda. Dengan menggunakan Aplikasi ini, Anda menyetujui praktik yang dijelaskan dalam Kebijakan Privasi ini.
+
+### **1. INFORMASI YANG KAMI KUMPULKAN**
+
+#### **1.1. Informasi Pribadi**
+Kami mengumpulkan informasi yang Anda berikan secara langsung:
+- **Data Identitas**: Nama lengkap, NIK, tanggal lahir, tempat lahir
+- **Kontak**: Alamat email, nomor telepon
+- **Demografis**: Alamat, kota, RT/RW, kode pos
+- **Dokumen**: Foto profil, dokumen Kartu Keluarga (KK)
+
+#### **1.2. Informasi Otomatis**
+- **Data Perangkat**: Tipe perangkat, sistem operasi, versi aplikasi
+- **Data Penggunaan**: Waktu akses, fitur yang digunakan, frekuensi penggunaan
+- **Lokasi**: Jika diizinkan, lokasi untuk keperluan layanan komunitas
+
+#### **1.3. Informasi dari Sumber Lain**
+- Data dari administrator komunitas terkait verifikasi
+- Informasi dari pihak ketiga dengan persetujuan Anda
+
+### **2. CARA KAMI MENGGUNAKAN INFORMASI**
+
+#### **2.1. Tujuan Penggunaan**
+- **Layanan Inti**: Verifikasi identitas, pengelolaan akun, layanan komunitas
+- **Komunikasi**: Pengumuman, notifikasi, informasi penting
+- **Pengembangan**: Meningkatkan kualitas aplikasi dan layanan
+- **Keamanan**: Deteksi dan pencegahan aktivitas mencurigakan
+- **Kepatuhan**: Memenuhi kewajiban hukum dan regulasi
+
+#### **2.2. Dasar Hukum Pemrosesan**
+- **Kepentingan sah**: Untuk menyediakan layanan yang diminta
+- **Persetujuan**: Untuk pemrosesan data sensitif tertentu
+- **Kewajiban hukum**: Untuk mematuhi peraturan yang berlaku
+
+### **3. BERBAGI INFORMASI**
+
+#### **3.1. Pihak Ketiga**
+Kami TIDAK akan menjual, menyewakan, atau membagikan informasi pribadi Anda kepada pihak ketiga untuk tujuan pemasaran tanpa persetujuan eksplisit Anda.
+
+#### **3.2. Pengecualian**
+Kami dapat membagikan informasi dalam kondisi berikut:
+- **Dengan persetujuan Anda**: Untuk layanan khusus yang membutuhkan
+- **Untuk kepatuhan hukum**: Jika diwajibkan oleh hukum atau proses hukum
+- **Untuk keamanan**: Untuk melindungi hak, properti, atau keselamatan
+- **Layanan pihak ketiga**: Penyedia layanan yang membantu operasi aplikasi
+
+### **4. PERLINDUNGAN DATA**
+
+#### **4.1. Langkah Keamanan**
+Kami menerapkan langkah-langkah teknis dan organisasi yang wajar:
+- **Enkripsi**: Data sensitif dienkripsi dalam transit dan penyimpanan
+- **Akses Terbatas**: Hanya personel berwenang yang dapat mengakses data
+- **Audit Reguler**: Pemantauan dan penilaian keamanan berkala
+- **Backup**: Sistem cadangan data untuk mencegah kehilangan
+
+#### **4.2. Penyimpanan Data**
+- **Lokasi**: Data disimpan di server dalam wilayah hukum Indonesia
+- **Durasi**: Data disimpan selama diperlukan atau sesuai ketentuan hukum
+- **Penghapusan**: Prosedur penghapusan data yang aman dan lengkap
+
+### **5. HAK PENGGUNA**
+
+#### **5.1. Hak yang Anda Miliki**
+- **Hak Akses**: Mengakses informasi pribadi Anda
+- **Hak Perbaikan**: Memperbaiki data yang tidak akurat
+- **Hak Penghapusan**: Meminta penghapusan data dalam kondisi tertentu
+- **Hak Pembatasan**: Membatasi pemrosesan data
+- **Hak Portabilitas**: Menerima data dalam format terstruktur
+- **Hak Penolakan**: Menolak pemrosesan untuk tujuan tertentu
+- **Hak Penarikan Persetujuan**: Menarik persetujuan kapan saja
+
+#### **5.2. Cara Menjalankan Hak**
+Untuk menjalankan hak-hak Anda, silakan hubungi:
+📧 privacy@wargaapp.com
+📞 (0341) 789-0123
+
+### **6. COOKIES DAN TEKNOLOGI SERUPA**
+
+#### **6.1. Penggunaan Cookies**
+Aplikasi kami dapat menggunakan cookies untuk:
+- **Fungsionalitas**: Menyimpan preferensi dan pengaturan
+- **Analitik**: Memahami pola penggunaan aplikasi
+- **Keamanan**: Mencegah aktivitas yang tidak sah
+
+#### **6.2. Kontrol Pengguna**
+Anda dapat mengelola preferensi cookies melalui pengaturan perangkat atau aplikasi.
+
+### **7. LAYANAN PIHAK KETIGA**
+
+#### **7.1. Penyedia Layanan**
+Kami dapat menggunakan layanan pihak ketiga untuk:
+- **Analitik**: Google Analytics (dengan anonimisasi data)
+- **Hosting**: Penyedia server cloud terpercaya
+- **Komunikasi**: Layanan email dan notifikasi push
+
+#### **7.2. Kebijakan Pihak Ketiga**
+Layanan pihak ketiga memiliki kebijakan privasi sendiri yang kami anjurkan untuk Anda tinjau.
+
+### **8. PERLINDUNGAN ANAK**
+
+#### **8.1. Batas Usia**
+Aplikasi ini tidak ditujukan untuk anak di bawah 13 tahun. Kami tidak dengan sengaja mengumpulkan informasi dari anak-anak.
+
+#### **8.2. Persetujuan Orang Tua**
+Untuk pengguna berusia 13-17 tahun, diperlukan persetujuan orang tua atau wali.
+
+### **9. TRANSFER DATA INTERNASIONAL**
+
+#### **9.1. Prinsip Umum**
+Data diproses dan disimpan terutama di dalam wilayah Indonesia.
+
+#### **9.2. Transfer Antar Negara**
+Jika transfer data antar negara diperlukan, kami akan memastikan perlindungan yang memadai sesuai standar hukum yang berlaku.
+
+### **10. PERUBAHAN KEBIJAKAN**
+
+#### **10.1. Pembaruan**
+Kami dapat memperbarui Kebijakan Privasi ini dari waktu ke waktu. Versi terbaru akan tersedia di Aplikasi.
+
+#### **10.2. Pemberitahuan**
+Perubahan signifikan akan diberitahukan melalui:
+- Notifikasi dalam aplikasi
+- Email ke alamat terdaftar
+- Pengumuman di beranda aplikasi
+
+### **11. PENYELESAIAN SENGKETA**
+
+#### **11.1. Mekanisme**
+Sengketa terkait privasi akan diselesaikan melalui:
+1. **Musyawarah**: Penyelesaian secara kekeluargaan
+2. **Mediasi**: Dengan bantuan mediator independen
+3. **Hukum**: Proses hukum sesuai yurisdiksi yang berlaku
+
+#### **11.2. Yurisdiksi**
+Kebijakan ini tunduk pada hukum Republik Indonesia.
+
+### **12. HUBUNGI KAMI**
+
+#### **12.1. Kontak Utama**
+Untuk pertanyaan, keluhan, atau pelaksanaan hak privasi:
+**Data Protection Officer Warga App**
+📧 dpo@wargaapp.com
+📞 (0341) 789-0123 (ext. 101)
+📠 (0341) 789-0124
+📍 Jl. Danau Ranau II, Malang, Jawa Timur 65111
+
+#### **12.2. Waktu Respon**
+Kami akan merespon dalam waktu **7 hari kerja** setelah permintaan diterima.
+
+### **13. PERSETUJUAN PENGGUNA**
+
+"Dengan melanjutkan penggunaan Aplikasi Warga App, saya menyatakan telah membaca, memahami, dan menyetujui seluruh ketentuan dalam Kebijakan Privasi ini. Saya memahami bahwa penggunaan aplikasi merupakan bukti persetujuan saya terhadap pemrosesan data pribadi sesuai dengan kebijakan ini."
+
+---
+
+**Dokumen ini telah disusun sesuai dengan:**
+- Undang-Undang No. 27 Tahun 2022 tentang Perlindungan Data Pribadi
+- Peraturan Menteri Komunikasi dan Informatika No. 20 Tahun 2016
+- Standar Internasional ISO/IEC 27001:2013
+
+**Status Dokumen: Disetujui**
+**Tanggal Efektif: 12 Desember 2024**
+**Tinjauan Berkala: Setiap 12 bulan**
+**Penanggung Jawab: Data Protection Officer**
+''');
+  }
+
+  void _showTermsConditions(BuildContext context) {
+    _showInfoDialog(context, 'Syarat & Ketentuan Penggunaan Aplikasi Warga', '''
+**PENERIMAAN SYARAT DAN KETENTUAN**
+
+Dengan mengakses dan menggunakan aplikasi Warga App ("Aplikasi"), Anda menyetujui untuk terikat dengan Syarat dan Ketentuan Penggunaan ini beserta semua hukum dan peraturan yang berlaku. Jika Anda tidak setuju dengan salah satu ketentuan ini, Anda dilarang menggunakan Aplikasi ini.
+
+**1. PENGGUNAAN APLIKASI**
+1.1. Aplikasi ini ditujukan untuk warga yang terdaftar dalam komunitas terkait.
+1.2. Anda harus berusia minimal 17 tahun atau telah mendapatkan persetujuan orang tua/wali untuk menggunakan Aplikasi.
+1.3. Anda bertanggung jawab untuk menjaga kerahasiaan akun dan kata sandi Anda.
+
+**2. KEWAJIBAN PENGGUNA**
+2.1. Menggunakan Aplikasi sesuai dengan tujuan yang telah ditetapkan.
+2.2. Tidak menyebarkan konten yang:
+   - Melanggar hukum atau peraturan yang berlaku
+   - Bersifat pornografi, SARA, ujaran kebencian, atau diskriminatif
+   - Mengandung informasi palsu atau menyesatkan
+   - Melanggar hak kekayaan intelektual pihak ketiga
+2.3. Menghormati privasi dan hak pengguna lain.
+2.4. Tidak melakukan aktivitas yang dapat mengganggu sistem atau keamanan Aplikasi.
+
+**3. DATA DAN PRIVASI**
+3.1. Data pribadi yang dikumpulkan akan digunakan sesuai dengan Kebijakan Privasi kami.
+3.2. Anda memberikan persetujuan untuk pengumpulan dan pemrosesan data sesuai kebutuhan layanan.
+3.3. Kami menjaga kerahasiaan data Anda kecuali diwajibkan oleh hukum.
+
+**4. HAK KEKAYAAN INTELEKTUAL**
+4.1. Seluruh konten, fitur, dan fungsi dalam Aplikasi adalah milik kami atau pemberi lisensi kami.
+4.2. Anda tidak diperbolehkan menyalin, memodifikasi, atau mendistribusikan konten tanpa izin tertulis.
+
+**5. BATASAN TANGGUNG JAWAB**
+5.1. Kami tidak bertanggung jawab atas:
+   - Kerugian tidak langsung, insidental, atau konsekuensial
+   - Ketidakakuratan atau kelengkapan informasi yang diunggah pengguna
+   - Aktivitas ilegal yang dilakukan oleh pengguna
+5.2. Layanan dapat dihentikan sementara untuk pemeliharaan tanpa pemberitahuan sebelumnya.
+
+**6. PENGGANTIAN KERUGIAN**
+Anda setuju untuk membebaskan dan tidak menuntut kami dari segala klaim, kerugian, atau tanggung jawab yang timbul dari penggunaan Aplikasi yang melanggar ketentuan ini.
+
+**7. PERUBAHAN KETENTUAN**
+Kami berhak mengubah Syarat dan Ketentuan ini kapan saja. Perubahan akan diberitahukan melalui Aplikasi dan berlaku sejak tanggal ditetapkan.
+
+**8. HUKUM YANG BERLAKU**
+Syarat dan Ketentuan ini tunduk pada hukum Republik Indonesia. Segala sengketa akan diselesaikan secara musyawarah, dan jika tidak tercapai kesepakatan, akan diselesaikan di Pengadilan Negeri yang berwenang.
+
+**9. KONTAK**
+Untuk pertanyaan terkait Syarat dan Ketentuan ini, silakan hubungi:
+📧 legal@wargaapp.com
+📞 (0341) 123-4567
+
+**Pernyataan Persetujuan**
+"Dengan melanjutkan penggunaan Aplikasi, saya menyatakan telah membaca, memahami, dan menyetujui seluruh Syarat dan Ketentuan Penggunaan ini."
+
+**Terakhir diperbarui: 12 Desember 2024**
+
+Versi: 2.0
+''');
+  }
+  
+// profile_screen.dart - UPDATE FUNGSI RATING SAJA
+
+  // Hapus semua kode EmailService import dan panggilan
+  // Hanya gunakan mailto yang sudah terbukti berfungsi
+
+  void _showRatingDialog(BuildContext context) {
+    int selectedRating = 0;
+    final commentController = TextEditingController();
+    bool _isSubmitting = false;
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return Dialog(
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(24),
+              ),
+              insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+              child: Container(
+                constraints: BoxConstraints(
+                  maxHeight: MediaQuery.of(context).size.height * 0.85,
+                ),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    // Header
+                    Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            Colors.amber.shade700,
+                            Colors.orange.shade500,
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: const BorderRadius.only(
+                          topLeft: Radius.circular(24),
+                          topRight: Radius.circular(24),
+                        ),
+                      ),
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.star_rounded,
+                              color: Colors.white,
+                              size: 28,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          const Expanded(
+                            child: Text(
+                              'Beri Rating Aplikasi',
+                              style: TextStyle(
+                                fontSize: 20,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.white,
+                              ),
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(
+                              Icons.close,
+                              color: Colors.white,
+                              size: 24,
+                            ),
+                            onPressed: _isSubmitting
+                                ? null
+                                : () => Navigator.pop(context),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    // Content
+                    Expanded(
+                      child: SingleChildScrollView(
+                        padding: const EdgeInsets.all(24),
+                        child: Column(
+                          children: [
+                            // Avatar user
+                            Container(
+                              margin: const EdgeInsets.only(bottom: 20),
+                              child: CircleAvatar(
+                                radius: 40,
+                                backgroundColor: Colors.amber.shade100,
+                                child: Icon(
+                                  Icons.person,
+                                  size: 40,
+                                  color: Colors.amber.shade800,
+                                ),
+                              ),
+                            ),
+
+                            // Judul
+                            const Text(
+                              'Bagaimana pengalaman Anda?',
+                              style: TextStyle(
+                                fontSize: 22,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black87,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 8),
+
+                            // Subtitle - PERBAIKI TEKS INI
+                            Text(
+                              'Rating Anda akan membuka aplikasi email untuk dikirim ke developer',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey.shade600,
+                                height: 1.5,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
+                            const SizedBox(height: 32),
+
+                            // Emoji
+                            if (selectedRating > 0)
+                              Container(
+                                margin: const EdgeInsets.only(bottom: 16),
+                                child: Text(
+                                  _getEmojiForRating(selectedRating),
+                                  style: const TextStyle(fontSize: 48),
+                                ),
+                              ),
+
+                            // Bintang dengan outline
+                            Container(
+                              margin: const EdgeInsets.symmetric(vertical: 16),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: List.generate(5, (index) {
+                                  final starNumber = index + 1;
+                                  final isFilled = starNumber <= selectedRating;
+
+                                  return GestureDetector(
+                                    onTap: () {
+                                      setState(() {
+                                        selectedRating = starNumber;
+                                      });
+                                    },
+                                    child: Container(
+                                      margin: const EdgeInsets.symmetric(
+                                        horizontal: 8,
+                                      ),
+                                      child: AnimatedContainer(
+                                        duration: const Duration(
+                                          milliseconds: 300,
+                                        ),
+                                        curve: Curves.elasticOut,
+                                        transform: isFilled
+                                            ? Matrix4.identity().scaled(
+                                                1.15,
+                                                1.15,
+                                              )
+                                            : Matrix4.identity(),
+                                        child: Icon(
+                                          isFilled
+                                              ? Icons.star_rounded
+                                              : Icons.star_border_rounded,
+                                          color: isFilled
+                                              ? Colors.amber.shade500
+                                              : Colors.grey.shade400,
+                                          size: 52,
+                                        ),
+                                      ),
+                                    ),
+                                  );
+                                }),
+                              ),
+                            ),
+
+                            // Label rating
+                            Text(
+                              _getRatingLabel(selectedRating),
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.w600,
+                                color: selectedRating > 0
+                                    ? _getRatingColor(selectedRating)
+                                    : Colors.grey.shade500,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+
+                            Text(
+                              '$selectedRating/5 Bintang',
+                              style: TextStyle(
+                                fontSize: 14,
+                                color: Colors.grey.shade600,
+                              ),
+                            ),
+
+                            const SizedBox(height: 32),
+
+                            // Komentar
+                            Container(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 20,
+                              ),
+                              decoration: BoxDecoration(
+                                color: Colors.grey.shade50,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: Colors.grey.shade200),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.message,
+                                        color: Colors.blue.shade600,
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'Komentar (Opsional)',
+                                        style: TextStyle(
+                                          fontSize: 16,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.blue.shade800,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 12),
+                                  TextField(
+                                    controller: commentController,
+                                    maxLines: 4,
+                                    maxLength: 300,
+                                    decoration: InputDecoration(
+                                      hintText:
+                                          'Apa yang bisa kami perbaiki? Fitur apa yang Anda suka?',
+                                      hintStyle: TextStyle(
+                                        color: Colors.grey.shade400,
+                                        fontSize: 14,
+                                      ),
+                                      border: InputBorder.none,
+                                      contentPadding: EdgeInsets.zero,
+                                    ),
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.grey.shade800,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+
+                            const SizedBox(height: 20),
+
+                            // Informasi pengiriman - PERBAIKI INI
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.shade50,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.blue.shade100),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.email_outlined,
+                                    color: Colors.blue.shade600,
+                                    size: 20,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(
+                                          'Aplikasi email akan terbuka',
+                                          style: TextStyle(
+                                            color: Colors.blue.shade800,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'Klik "Kirim" untuk membuka email',
+                                          style: TextStyle(
+                                            color: Colors.blue.shade600,
+                                            fontSize: 12,
+                                          ),
+                                        ),
+                                        const SizedBox(height: 4),
+                                        Text(
+                                          'Tujuan: Email developer Warga App',
+                                          style: TextStyle(
+                                            color: Colors.blue.shade700,
+                                            fontSize: 12,
+                                            fontWeight: FontWeight.w500,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+
+                    // Footer
+                    Container(
+                      padding: const EdgeInsets.all(24),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        border: Border(
+                          top: BorderSide(color: Colors.grey.shade200),
+                        ),
+                        borderRadius: const BorderRadius.only(
+                          bottomLeft: Radius.circular(24),
+                          bottomRight: Radius.circular(24),
+                        ),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.grey.shade200.withOpacity(0.5),
+                            blurRadius: 10,
+                            offset: const Offset(0, -4),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        children: [
+                          // Tombol Kirim - LANGSUNG MAILTO
+                          SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton(
+                              onPressed: selectedRating == 0 || _isSubmitting
+                                  ? null
+                                  : () async {
+                                      setState(() => _isSubmitting = true);
+
+                                      try {
+                                        // LANGSUNG kirim via mailto
+                                        final success =
+                                            await _sendRatingViaMailTo(
+                                              rating: selectedRating,
+                                              comment: commentController.text,
+                                            );
+
+                                        if (mounted) {
+                                          Navigator.pop(context);
+                                          if (success) {
+                                            _showRatingSuccessDialog(
+                                              context,
+                                              selectedRating,
+                                            );
+                                          } else {
+                                            _showRatingManualDialog(
+                                              context,
+                                              selectedRating,
+                                              commentController.text,
+                                            );
+                                          }
+                                        }
+                                      } catch (e) {
+                                        if (mounted) {
+                                          Navigator.pop(context);
+                                          _showRatingManualDialog(
+                                            context,
+                                            selectedRating,
+                                            commentController.text,
+                                          );
+                                        }
+                                      } finally {
+                                        if (mounted) {
+                                          setState(() => _isSubmitting = false);
+                                        }
+                                      }
+                                    },
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: selectedRating > 0
+                                    ? Colors.amber.shade600
+                                    : Colors.grey.shade300,
+                                foregroundColor: Colors.white,
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 18,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                                elevation: 3,
+                                shadowColor: Colors.amber.shade200,
+                              ),
+                              child: _isSubmitting
+                                  ? Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        SizedBox(
+                                          width: 22,
+                                          height: 22,
+                                          child: CircularProgressIndicator(
+                                            strokeWidth: 2.5,
+                                            color: Colors.white,
+                                          ),
+                                        ),
+                                        const SizedBox(width: 12),
+                                        const Text(
+                                          'Membuka Email...',
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w600,
+                                          ),
+                                        ),
+                                      ],
+                                    )
+                                  : Row(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Icon(Icons.email_rounded, size: 22),
+                                        const SizedBox(width: 10),
+                                        Text(
+                                          'BUKA APLIKASI EMAIL',
+                                          style: TextStyle(
+                                            fontSize: 16,
+                                            fontWeight: FontWeight.w600,
+                                            letterSpacing: 0.5,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                            ),
+                          ),
+
+                          const SizedBox(height: 16),
+
+                          // Tombol Batal
+                          SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton(
+                              onPressed: _isSubmitting
+                                  ? null
+                                  : () => Navigator.pop(context),
+                              style: OutlinedButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(
+                                  vertical: 16,
+                                ),
+                                side: BorderSide(
+                                  color: Colors.grey.shade300,
+                                  width: 1.5,
+                                ),
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(16),
+                                ),
+                              ),
+                              child: Text(
+                                'Nanti Saja',
+                                style: TextStyle(
+                                  color: Colors.grey.shade700,
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.w500,
+                                ),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+  // FUNGSI UTAMA: Kirim rating via mailto
+  Future<bool> _sendRatingViaMailTo({
+    required int rating,
+    required String comment,
+  }) async {
+    try {
+      print('📧 Membuat email rating...');
+
+      final userName = _currentUser.namaLengkap ?? 'Pengguna Warga App';
+      final userEmail = _currentUser.email;
+
+      // Format email yang lebih baik
+      final subject = '⭐ Rating $rating/5 - Warga App - $userName';
+      final body =
+          '''
+✉️ RATING DARI APLIKASI Warga App
+──────────────────────────────────
+
+👤 **INFORMASI PENGGUNA**
+Nama: $userName
+Email: $userEmail
+
+⭐ **RATING APLIKASI**
+Rating: $rating/5
+${_getStars(rating)}
+
+💭 **KOMENTAR**
+${comment.isNotEmpty ? comment : 'Tidak ada komentar'}
+
+📋 **INFORMASI TEKNIS**
+Tanggal: ${DateTime.now().toLocal()}
+Aplikasi: Warga App
+Versi: 1.0.0
+Platform: ${Platform.operatingSystem}
+
+──────────────────────────────────
+📱 Rating ini dikirim otomatis dari aplikasi Warga App
+📧 Email pengguna: $userEmail
+''';
+
+      final mailtoUri =
+          'mailto:nabilkencana20@gmail.com?'
+          'subject=${Uri.encodeComponent(subject)}&'
+          'body=${Uri.encodeComponent(body)}';
+
+      print('📤 Mailto URI siap');
+      print('   Subjek: $subject');
+      print('   Panjang body: ${body.length} karakter');
+
+      if (await canLaunchUrl(Uri.parse(mailtoUri))) {
+        print('🚀 Membuka aplikasi email...');
+        await launchUrl(Uri.parse(mailtoUri));
+        print('✅ Aplikasi email dibuka');
+        return true;
+      } else {
+        print('❌ Tidak bisa membuka mailto');
+        return false;
+      }
+    } catch (e) {
+      print('❌ Error mailto: $e');
+      return false;
+    }
+  }
+
+  // Helper: Buat string bintang
+  String _getStars(int rating) {
+    String stars = '';
+    for (int i = 0; i < rating; i++) {
+      stars += '★';
+    }
+    for (int i = rating; i < 5; i++) {
+      stars += '☆';
+    }
+    return 'Bintang: $stars';
+  }
+
+  // Dialog jika mailto gagal (tampilkan data rating)
+  void _showRatingManualDialog(
+    BuildContext context,
+    int rating,
+    String comment,
+  ) {
+    final userName = _currentUser.namaLengkap ?? 'Pengguna Warga App';
+    final userEmail = _currentUser.email;
+
+    showDialog(
+      context: context,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(
+                Icons.copy_all_rounded,
+                color: Colors.blue.shade600,
+                size: 50,
+              ),
+              const SizedBox(height: 20),
+
+              const Text(
+                'Salin Data Rating',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              Text(
+                'Aplikasi email tidak dapat dibuka. Silakan salin data di bawah dan kirim manual ke:',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+              ),
+              const SizedBox(height: 8),
+
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.amber.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Text(
+                  'nabilkencana20@gmail.com',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.amber.shade800,
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Data rating yang bisa di-copy
+              Container(
+                width: double.infinity,
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: Colors.grey.shade200),
+                ),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text('👤 Nama: $userName'),
+                    Text('📧 Email: $userEmail'),
+                    Text('⭐ Rating: $rating/5 ${_getStars(rating)}'),
+                    if (comment.isNotEmpty) Text('💭 Komentar: $comment'),
+                    Text('📅 Tanggal: ${DateTime.now().toLocal()}'),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 24),
+
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      child: const Text('Tutup'),
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        final data =
+                            '''
+Nama: $userName
+Email: $userEmail
+Rating: $rating/5 ${_getStars(rating)}
+${comment.isNotEmpty ? 'Komentar: $comment' : ''}
+Tanggal: ${DateTime.now().toLocal()}
+Aplikasi: Warga App
+                      ''';
+
+                        await Clipboard.setData(ClipboardData(text: data));
+                        _showSuccessSnackbar('Data rating disalin!');
+                        Navigator.pop(context);
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.blue.shade600,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                      ),
+                      child: const Row(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          Icon(Icons.copy, size: 18),
+                          SizedBox(width: 8),
+                          Text('Salin'),
+                        ],
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  // Dialog sukses
+  void _showRatingSuccessDialog(BuildContext context, int rating) {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Text('Bagaimana pengalaman Anda menggunakan aplikasi?'),
+            Icon(Icons.check_circle, color: Colors.green.shade600, size: 60),
             const SizedBox(height: 20),
+
+            const Text(
+              'Rating Terkirim!',
+              style: TextStyle(
+                fontSize: 20,
+                fontWeight: FontWeight.bold,
+                color: Colors.black87,
+              ),
+            ),
+            const SizedBox(height: 12),
+
+            Text(
+              'Terima kasih atas rating $rating/5!',
+              style: TextStyle(fontSize: 16, color: Colors.grey.shade700),
+            ),
+            const SizedBox(height: 8),
+
+            Text(
+              'Aplikasi email telah terbuka. Silakan klik "Kirim".',
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 14, color: Colors.grey.shade600),
+            ),
+            const SizedBox(height: 20),
+
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
-              children: [1, 2, 3, 4, 5].map((star) {
-                return IconButton(
-                  icon: Icon(Icons.star, color: Colors.amber, size: 35),
-                  onPressed: () {
-                    _showSuccessSnackbar(
-                      'Terima kasih atas rating $star bintang!',
-                    );
-                    Navigator.pop(context);
-                  },
-                );
-              }).toList(),
+              children: [
+                for (int i = 1; i <= 5; i++)
+                  Icon(
+                    Icons.star_rounded,
+                    color: i <= rating
+                        ? Colors.amber.shade500
+                        : Colors.grey.shade300,
+                    size: 28,
+                  ),
+              ],
             ),
           ],
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: Text('Nanti', style: TextStyle(color: Colors.grey.shade600)),
+            child: Text(
+              'Tutup',
+              style: TextStyle(
+                color: Colors.blue.shade600,
+                fontWeight: FontWeight.w600,
+              ),
+            ),
           ),
         ],
       ),
     );
   }
 
+  // Helper functions (tetap sama)
+  String _getRatingLabel(int rating) {
+    switch (rating) {
+      case 1:
+        return 'Buruk';
+      case 2:
+        return 'Kurang Baik';
+      case 3:
+        return 'Cukup';
+      case 4:
+        return 'Baik';
+      case 5:
+        return 'Luar Biasa!';
+      default:
+        return 'Tap bintang untuk memberi rating';
+    }
+  }
+
+  String _getEmojiForRating(int rating) {
+    switch (rating) {
+      case 1:
+        return '😞';
+      case 2:
+        return '😕';
+      case 3:
+        return '😐';
+      case 4:
+        return '😊';
+      case 5:
+        return '🤩';
+      default:
+        return '⭐';
+    }
+  }
+
+  Color _getRatingColor(int rating) {
+    switch (rating) {
+      case 1:
+        return Colors.red.shade600;
+      case 2:
+        return Colors.orange.shade600;
+      case 3:
+        return Colors.amber.shade600;
+      case 4:
+        return Colors.lightGreen.shade600;
+      case 5:
+        return Colors.green.shade600;
+      default:
+        return Colors.grey.shade400;
+    }
+  }
+
+
   void _showInfoDialog(BuildContext context, String title, String content) {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
+      builder: (context) => Dialog(
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold)),
-        content: SingleChildScrollView(child: Text(content)),
-        actions: [
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.blue.shade600,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(12),
+        insetPadding: const EdgeInsets.all(16),
+        child: Container(
+          constraints: BoxConstraints(
+            maxHeight: MediaQuery.of(context).size.height * 0.85,
+            maxWidth: 600,
+          ),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // Header dengan ikon dan judul
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 20,
+                ),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [Colors.blue.shade800, Colors.blue.shade400],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(20),
+                    topRight: Radius.circular(20),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(
+                        title.contains('Privasi')
+                            ? Icons.security_rounded
+                            : Icons.description_rounded,
+                        color: Colors.white,
+                        size: 28,
+                      ),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Text(
+                        title,
+                        style: const TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white,
+                          height: 1.3,
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
               ),
+
+              // Badge versi dan tanggal
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 12,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  border: Border(
+                    bottom: BorderSide(color: Colors.grey.shade200),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 10,
+                        vertical: 4,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.blue.shade50,
+                        borderRadius: BorderRadius.circular(6),
+                        border: Border.all(color: Colors.blue.shade200),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.update,
+                            size: 14,
+                            color: Colors.blue,
+                          ),
+                          const SizedBox(width: 6),
+                          Text(
+                            'Versi 3.0 • 12 Des 2024',
+                            style: TextStyle(
+                              fontSize: 12,
+                              fontWeight: FontWeight.w500,
+                              color: Colors.blue.shade800,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    const Spacer(),
+                    IconButton(
+                      icon: Icon(
+                        Icons.close,
+                        color: Colors.grey.shade500,
+                        size: 20,
+                      ),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+              ),
+
+              // Konten dengan scroll
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      // Konten utama
+                      SelectableText(
+                        content,
+                        style: TextStyle(
+                          fontSize: 14,
+                          color: Colors.grey.shade800,
+                          height: 1.6,
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Informasi tambahan
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.shade200),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              '📋 Informasi Dokumen',
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: Colors.grey.shade800,
+                              ),
+                            ),
+                            const SizedBox(height: 8),
+                            _buildDocInfoRow('Status', 'Disetujui'),
+                            _buildDocInfoRow(
+                              'Penanggung Jawab',
+                              'Data Protection Officer',
+                            ),
+                            _buildDocInfoRow(
+                              'Tinjauan Berkala',
+                              'Setiap 12 bulan',
+                            ),
+                            _buildDocInfoRow('Halaman', 'Halaman 1 dari 1'),
+                          ],
+                        ),
+                      ),
+                      const SizedBox(height: 24),
+
+                      // Peringatan penting
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.orange.shade200),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              Icons.warning_amber_rounded,
+                              color: Colors.orange.shade600,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Pernyataan Persetujuan',
+                                    style: TextStyle(
+                                      color: Colors.orange.shade800,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Dengan melanjutkan penggunaan aplikasi, Anda dianggap telah membaca, memahami, dan menyetujui seluruh ketentuan dalam dokumen ini.',
+                                    style: TextStyle(
+                                      color: Colors.orange.shade700,
+                                      fontSize: 12,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+
+              // Tombol aksi
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  border: Border(top: BorderSide(color: Colors.grey.shade200)),
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(20),
+                    bottomRight: Radius.circular(20),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () async {
+                          // Simpan atau bagikan dokumen
+                          _showSuccessSnackbar('Fitur penyimpanan akan datang');
+                        },
+                        icon: Icon(
+                          Icons.download_rounded,
+                          size: 18,
+                          color: Colors.grey.shade600,
+                        ),
+                        label: Text(
+                          'Simpan',
+                          style: TextStyle(color: Colors.grey.shade700),
+                        ),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          side: BorderSide(color: Colors.grey.shade300),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton.icon(
+                        onPressed: () => Navigator.pop(context),
+                        icon: Icon(
+                          Icons.check_circle,
+                          size: 18,
+                          color: Colors.white,
+                        ),
+                        label: const Text('Saya Mengerti'),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.blue.shade600,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDocInfoRow(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        children: [
+          Text(
+            '$label: ',
+            style: TextStyle(
+              fontSize: 12,
+              color: Colors.grey.shade600,
+              fontWeight: FontWeight.w500,
             ),
-            child: const Text('Tutup'),
+          ),
+          Text(
+            value,
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
           ),
         ],
       ),
@@ -3220,71 +5875,29 @@ Color _getStatusColor(String status) {
           padding: const EdgeInsets.all(24),
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Status verifikasi di bagian atas seperti screenshot
-              Container(
-                width: double.infinity,
-                padding: const EdgeInsets.symmetric(
-                  vertical: 12,
-                  horizontal: 16,
-                ),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.red.shade100),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.verified_user_outlined,
-                      color: Colors.red.shade600,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 10),
-                    Expanded(
-                      child: Text(
-                        _currentUser.isVerified == true
-                            ? 'ADMIN - TERVERIFIKASI'
-                            : 'ADMIN - BELUM TERVERIFIKASI',
-                        style: TextStyle(
-                          color: Colors.red.shade700,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ),
-                  ],
+              // Judul
+              const Text(
+                'Konfirmasi Keluar',
+                style: TextStyle(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.black87,
                 ),
               ),
 
               const SizedBox(height: 20),
 
-              // Judul
-              const Center(
-                child: Text(
-                  'Konfirmasi Keluar',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.bold,
-                    color: Colors.black87,
-                  ),
-                ),
-              ),
+              // Icon peringatan
+              Icon(Icons.logout, color: Colors.red.shade600, size: 50),
 
               const SizedBox(height: 16),
 
               // Pesan konfirmasi
-              const Center(
-                child: Text(
-                  'Apakah Anda yakin ingin keluar dari aplikasi?',
-                  textAlign: TextAlign.center,
-                  style: TextStyle(
-                    fontSize: 15,
-                    color: Colors.grey,
-                    height: 1.5,
-                  ),
-                ),
+              const Text(
+                'Apakah Anda yakin ingin keluar dari aplikasi?',
+                textAlign: TextAlign.center,
+                style: TextStyle(fontSize: 15, color: Colors.grey, height: 1.5),
               ),
 
               const SizedBox(height: 28),

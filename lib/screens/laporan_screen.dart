@@ -5,8 +5,8 @@ import 'dart:convert';
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
-import 'package:flutter_latihan1/screens/riwayat_laporan_screen.dart';
-import 'package:flutter_latihan1/services/auth_service.dart';
+import 'package:warga_app/screens/riwayat_laporan_screen.dart';
+import 'package:warga_app/services/auth_service.dart';
 import 'package:http_parser/http_parser.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:mime/mime.dart';
@@ -1048,7 +1048,6 @@ class _LaporanScreenState extends State<LaporanScreen> {
       ),
     );
   }
-
 
   void _showSuccessDialog({String? imageUrl, String reportId = '-'}) {
     showDialog(

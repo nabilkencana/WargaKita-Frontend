@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:flutter_latihan1/screens/login_screen.dart';
-import 'package:flutter_latihan1/screens/home_screen.dart';
-import 'package:flutter_latihan1/screens/splash_screen.dart';
-import 'package:flutter_latihan1/screens/verify_otp_screen.dart';
-import 'package:flutter_latihan1/models/user_model.dart';
-import 'package:flutter_latihan1/services/auth_service.dart';
+import 'package:warga_app/screens/login_screen.dart';
+import 'package:warga_app/screens/home_screen.dart';
+import 'package:warga_app/screens/splash_screen.dart';
+import 'package:warga_app/screens/verify_otp_screen.dart';
+import 'package:warga_app/models/user_model.dart';
+import 'package:warga_app/services/auth_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();

@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
-import 'package:flutter_latihan1/main.dart';
+import 'package:warga_app/main.dart';
 
 void main() {
   testWidgets('CardTheme is applied correctly', (WidgetTester tester) async {

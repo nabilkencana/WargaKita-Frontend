@@ -1,11 +1,13 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_latihan1/models/user_model.dart';
-import 'package:flutter_latihan1/screens/register_screen.dart';
-import 'package:flutter_latihan1/screens/home_screen.dart';
+import 'package:warga_app/models/user_model.dart';
+import 'package:warga_app/screens/register_screen.dart';
+import 'package:warga_app/screens/home_screen.dart';
 import '../services/auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
-  const LoginScreen({super.key});
+   final String? prefilledEmail; // 🎯 Parameter baru
+
+  const LoginScreen({super.key, this.prefilledEmail}); // 🎯 Constructor update
 
   @override
   _LoginScreenState createState() => _LoginScreenState();
@@ -41,6 +43,24 @@ class _LoginScreenState extends State<LoginScreen>
     _initializeAnimations();
     _checkExistingGoogleUser();
     _setupEmailListener();
+    _prefillEmail(); // 🎯 Prefill email dari register
+  }
+
+   // 🎯 METHOD BARU: Prefill email jika ada dari register screen
+  void _prefillEmail() {
+    if (widget.prefilledEmail != null && widget.prefilledEmail!.isNotEmpty) {
+      _emailController.text = widget.prefilledEmail!;
+      // Trigger validation after setting text
+      final email = _emailController.text.trim();
+      final isValid = _validateEmailFormat(email);
+
+      setState(() {
+        _isEmailValid = isValid;
+        _showEmailHint = email.isEmpty;
+      });
+
+      print('📧 Email prefilled from register: ${widget.prefilledEmail}');
+    }
   }
 
   void _initializeAnimations() {
@@ -69,6 +89,7 @@ class _LoginScreenState extends State<LoginScreen>
     _controller.forward();
   }
 
+  // Update _setupEmailListener untuk handle prefill
   void _setupEmailListener() {
     _emailController.addListener(() {
       final email = _emailController.text.trim();
@@ -402,6 +423,7 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
+  // Update method untuk navigasi ke register
   void _navigateToRegisterWithEmail(String email) {
     Navigator.pushReplacement(
       context,
@@ -617,18 +639,44 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
+  // Update _buildEmailInput untuk menampilkan status prefill
   Widget _buildEmailInput() {
+    final isPrefilled =
+        widget.prefilledEmail != null && widget.prefilledEmail!.isNotEmpty;
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        Text(
-          'Alamat Email',
-          style: TextStyle(
-            fontSize: 15,
-            fontWeight: FontWeight.w600,
-            color: Colors.grey.shade700,
-            letterSpacing: 0.3,
-          ),
+        Row(
+          children: [
+            Text(
+              'Alamat Email',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey.shade700,
+                letterSpacing: 0.3,
+              ),
+            ),
+            if (isPrefilled) ...[
+              const SizedBox(width: 8),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                decoration: BoxDecoration(
+                  color: const Color(0xFF0D6EFD).withOpacity(0.1),
+                  borderRadius: BorderRadius.circular(4),
+                ),
+                child: Text(
+                  'Dari pendaftaran',
+                  style: TextStyle(
+                    color: const Color(0xFF0D6EFD),
+                    fontSize: 10,
+                    fontWeight: FontWeight.w600,
+                  ),
+                ),
+              ),
+            ],
+          ],
         ),
         const SizedBox(height: 12),
         AnimatedContainer(
@@ -638,10 +686,12 @@ class _LoginScreenState extends State<LoginScreen>
             border: Border.all(
               color: _emailFocusNode.hasFocus
                   ? _primaryColor.withOpacity(0)
-                  : _isEmailValid && _emailController.text.isNotEmpty
-                  ? Colors.green.shade400
-                  : Colors.white,
-              width: _emailFocusNode.hasFocus ? 2.5 : 1.5,
+                  : (isPrefilled
+                        ? const Color(0xFF0D6EFD).withOpacity(0.5)
+                        : (_isEmailValid && _emailController.text.isNotEmpty
+                              ? Colors.green.shade400
+                              : Colors.white)),
+              width: _emailFocusNode.hasFocus || isPrefilled ? 2.5 : 1.5,
             ),
             boxShadow: _emailFocusNode.hasFocus
                 ? [
@@ -651,7 +701,15 @@ class _LoginScreenState extends State<LoginScreen>
                       spreadRadius: 2,
                     ),
                   ]
-                : [],
+                : (isPrefilled
+                      ? [
+                          BoxShadow(
+                            color: const Color(0xFF0D6EFD).withOpacity(0.1),
+                            blurRadius: 8,
+                            spreadRadius: 1,
+                          ),
+                        ]
+                      : []),
           ),
           child: TextField(
             controller: _emailController,
@@ -659,24 +717,22 @@ class _LoginScreenState extends State<LoginScreen>
             decoration: InputDecoration(
               hintText: 'nama@gmail.com',
               hintStyle: TextStyle(
-                color: Colors.grey.shade500,
+                color: isPrefilled
+                    ? const Color(0xFF0D6EFD).withOpacity(0.6)
+                    : Colors.grey.shade500,
                 fontSize: 15,
-                // FIX: Gunakan font yang sama dengan input text
-                fontFamily: 'Roboto', // Sesuaikan dengan font utama Anda
+                fontFamily: 'Roboto',
                 fontWeight: FontWeight.normal,
               ),
               border: InputBorder.none,
-              // FIX: Tambahkan constraints pada placeholder
-              constraints: const BoxConstraints(
-                minHeight: 51, // Sesuaikan dengan tinggi TextField
-              ),
+              constraints: const BoxConstraints(minHeight: 51),
               contentPadding: const EdgeInsets.symmetric(
                 horizontal: 23,
                 vertical: 18,
               ),
               prefixIcon: Icon(
                 Icons.email_outlined,
-                color: _emailFocusNode.hasFocus
+                color: _emailFocusNode.hasFocus || isPrefilled
                     ? _primaryColor
                     : Colors.grey.shade500,
                 size: 22,
@@ -687,7 +743,9 @@ class _LoginScreenState extends State<LoginScreen>
                       child: _isEmailValid
                           ? Icon(
                               Icons.check_circle_rounded,
-                              color: Colors.green,
+                              color: isPrefilled
+                                  ? const Color(0xFF0D6EFD)
+                                  : Colors.green,
                               size: 24,
                             )
                           : Icon(
@@ -697,14 +755,19 @@ class _LoginScreenState extends State<LoginScreen>
                             ),
                     )
                   : null,
+              fillColor: isPrefilled
+                  ? const Color(0xFF0D6EFD).withOpacity(0.05)
+                  : Colors.white,
+              filled: true,
             ),
             keyboardType: TextInputType.emailAddress,
             style: TextStyle(
               fontSize: 16,
               fontWeight: FontWeight.w500,
-              color: Colors.grey.shade800,
-              // FIX: Pastikan font placeholder dan input sama
-              fontFamily: 'Roboto', // Sesuaikan dengan font placeholder
+              color: isPrefilled
+                  ? const Color(0xFF0D6EFD)
+                  : Colors.grey.shade800,
+              fontFamily: 'Roboto',
             ),
             onSubmitted: (_) => _sendOtp(),
           ),
@@ -713,8 +776,15 @@ class _LoginScreenState extends State<LoginScreen>
           Padding(
             padding: const EdgeInsets.only(top: 8, left: 4),
             child: Text(
-              'Gunakan email dengan format @gmail.com',
-              style: TextStyle(color: Colors.grey.shade500, fontSize: 13),
+              isPrefilled
+                  ? 'Email sudah diisi dari proses pendaftaran. Lanjutkan login.'
+                  : 'Gunakan email dengan format @gmail.com',
+              style: TextStyle(
+                color: isPrefilled
+                    ? const Color(0xFF0D6EFD).withOpacity(0.8)
+                    : Colors.grey.shade500,
+                fontSize: 13,
+              ),
             ),
           ),
       ],
@@ -834,6 +904,7 @@ class _LoginScreenState extends State<LoginScreen>
     );
   }
 
+  // Update _buildRegisterSection untuk handle navigasi dengan email
   Widget _buildRegisterSection() {
     return Center(
       child: Column(
@@ -849,7 +920,7 @@ class _LoginScreenState extends State<LoginScreen>
                 context,
                 PageRouteBuilder(
                   pageBuilder: (context, animation, secondaryAnimation) =>
-                      const RegisterScreen(),
+                      RegisterScreen(prefilledEmail: _emailController.text),
                   transitionsBuilder:
                       (context, animation, secondaryAnimation, child) =>
                           _createSlideTransition(animation, child),

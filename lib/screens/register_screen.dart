@@ -1,5 +1,6 @@
 import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
+import 'package:warga_app/screens/login_screen.dart';
 import 'dart:io';
 import '../services/register_service.dart';
 import '../models/register_model.dart';
@@ -122,6 +123,33 @@ class _RegisterScreenState extends State<RegisterScreen>
         _animationController.forward();
       });
     }
+  }
+
+  void _navigateToLoginWithEmail(String email) {
+    Navigator.pushAndRemoveUntil(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) =>
+            LoginScreen(prefilledEmail: email),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          const begin = Offset(1.0, 0.0);
+          const end = Offset.zero;
+          const curve = Curves.easeInOutCubic;
+          final tween = Tween(
+            begin: begin,
+            end: end,
+          ).chain(CurveTween(curve: curve));
+          final offsetAnimation = animation.drive(tween);
+
+          return SlideTransition(
+            position: offsetAnimation,
+            child: FadeTransition(opacity: animation, child: child),
+          );
+        },
+        transitionDuration: const Duration(milliseconds: 500),
+      ),
+      (route) => false,
+    );
   }
 
   // 🎯 METHOD BARU: Validasi step sebelum pindah
@@ -582,10 +610,11 @@ class _RegisterScreenState extends State<RegisterScreen>
 
       _showSuccess('${response.message}! Mengarahkan ke login...');
 
+      // 🎯 NAVIGASI KE LOGIN SCREEN DENGAN EMAIL
       await Future.delayed(const Duration(seconds: 2));
 
       if (mounted) {
-        Navigator.pop(context);
+        _navigateToLoginWithEmail(_emailController.text.trim());
       }
     } catch (e) {
       _showError(e.toString());
@@ -593,6 +622,7 @@ class _RegisterScreenState extends State<RegisterScreen>
       setState(() => _isLoading = false);
     }
   }
+
   void _showError(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -789,7 +819,7 @@ class _RegisterScreenState extends State<RegisterScreen>
               _buildContactField(
                 controller: _phoneController,
                 label: 'Nomor Telepon',
-                hint: '+62 812-3456-7890',
+                hint: '081234567890',
                 icon: Icons.phone_iphone,
                 iconColor: Colors.green,
                 keyboardType: TextInputType.phone,

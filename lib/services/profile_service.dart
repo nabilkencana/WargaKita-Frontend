@@ -1,5 +1,4 @@
 import 'dart:convert';
-import 'dart:io';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
 import '../models/user_model.dart';
@@ -74,7 +73,7 @@ class ProfileService {
       };
 
       // Hapus field yang kosong
-      updateData.removeWhere((key, value) => value == null || value.toString().isEmpty);
+      updateData.removeWhere((key, value) => value.toString().isEmpty);
 
       print('🔄 Updating profile with data: $updateData');
 
@@ -170,7 +169,7 @@ class ProfileService {
 
       // Buat multipart file
       final multipartFile = http.MultipartFile.fromBytes(
-        'kkFile',
+        'profilePicture', // <-- INI HARUS DIPERBAIKI. Contoh: 'file', 'profilePicture', dll.
         imageBytes,
         filename: fileName,
         contentType: MediaType.parse(mimeType),
@@ -673,31 +672,6 @@ class ProfileService {
     } catch (e) {
       print('❌ Error getting profile activity: $e');
       throw Exception('Gagal mengambil aktivitas: ${e.toString()}');
-    }
-  }
-
-  // Helper untuk parse response error
-  static String _parseErrorResponse(http.Response response) {
-    try {
-      final error = json.decode(response.body);
-      return error['message'] ?? 'Terjadi kesalahan: ${response.statusCode}';
-    } catch (e) {
-      return 'Terjadi kesalahan: ${response.statusCode}';
-    }
-  }
-
-  // Helper untuk handle common errors
-  static void _handleCommonError(int statusCode, String responseBody) {
-    if (statusCode == 401) {
-      AuthService.logout();
-      throw Exception('Sesi telah berakhir, silakan login kembali');
-    }
-    
-    try {
-      final error = json.decode(responseBody);
-      throw Exception(error['message'] ?? 'Terjadi kesalahan: $statusCode');
-    } catch (e) {
-      throw Exception('Terjadi kesalahan: $statusCode');
     }
   }
 }

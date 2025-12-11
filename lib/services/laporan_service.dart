@@ -1,6 +1,6 @@
 // services/laporan_service.dart
 import 'dart:convert';
-import 'package:flutter_latihan1/services/auth_service.dart';
+import 'package:warga_app/services/auth_service.dart';
 import 'package:http/http.dart' as http;
 import '../models/laporan_model.dart';
 
