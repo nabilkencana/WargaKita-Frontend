@@ -4,6 +4,7 @@ import '../models/user_model.dart';
 import '../models/sos_model.dart';
 import '../services/sos_service.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:intl/intl.dart';
 
 class SosScreen extends StatefulWidget {
   final User user;
@@ -17,24 +18,35 @@ class SosScreen extends StatefulWidget {
 class _SosScreenState extends State<SosScreen> {
   final SosService _sosService = SosService();
   bool _isLoading = false;
+  bool _isLoadingEmergencies = false;
   List<Emergency> _activeEmergencies = [];
   EmergencyStats? _stats;
 
   @override
   void initState() {
     super.initState();
-    _loadActiveEmergencies();
-    _loadStats();
+    _loadData();
+  }
+
+  Future<void> _loadData() async {
+    await Future.wait([_loadActiveEmergencies(), _loadStats()]);
   }
 
   Future<void> _loadActiveEmergencies() async {
+    setState(() {
+      _isLoadingEmergencies = true;
+    });
     try {
       final emergencies = await _sosService.getActiveEmergencies();
       setState(() {
         _activeEmergencies = emergencies;
       });
     } catch (e) {
-      _showErrorSnackbar('Gagal memuat data emergency aktif');
+      _showErrorSnackbar('Gagal memuat data emergency aktif: $e');
+    } finally {
+      setState(() {
+        _isLoadingEmergencies = false;
+      });
     }
   }
 
@@ -51,13 +63,21 @@ class _SosScreenState extends State<SosScreen> {
 
   void _showErrorSnackbar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.red),
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.red,
+        duration: const Duration(seconds: 3),
+      ),
     );
   }
 
   void _showSuccessSnackbar(String message) {
     ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text(message), backgroundColor: Colors.green),
+      SnackBar(
+        content: Text(message),
+        backgroundColor: Colors.green,
+        duration: const Duration(seconds: 2),
+      ),
     );
   }
 
@@ -67,23 +87,33 @@ class _SosScreenState extends State<SosScreen> {
     });
 
     try {
+      // Pastikan userId adalah int
+      int? userId;
+      if (widget.user.id is int) {
+        userId = widget.user.id as int;
+      } else      userId = int.tryParse(widget.user.id);
+    
+    
       final request = CreateSOSRequest(
         type: type,
         details: 'SOS Emergency dari ${widget.user.name ?? "Pengguna"}',
-        location: 'Lokasi pengguna',
+        location: 'Lokasi saat ini',
+        latitude: '-6.2088', // Contoh koordinat (Jakarta)
+        longitude: '106.8456',
         needVolunteer: true,
         volunteerCount: 5,
-        userId: widget.user.id,
+        userId: userId,
       );
 
       final emergency = await _sosService.createSOS(request);
 
-      setState(() {
-        _activeEmergencies.insert(0, emergency);
-      });
-
       _showSuccessSnackbar('SOS Emergency berhasil dikirim!');
-      _loadStats();
+
+      // Refresh data setelah mengirim SOS
+      await _loadData();
+
+      // Tampilkan detail emergency yang baru dibuat
+      _showEmergencyDetails(emergency);
     } catch (e) {
       _showErrorSnackbar('Gagal mengirim SOS: $e');
     } finally {
@@ -93,6 +123,91 @@ class _SosScreenState extends State<SosScreen> {
     }
   }
 
+  void _showEmergencyDetails(Emergency emergency) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        backgroundColor: Colors.white,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Icon(Icons.emergency, color: Colors.red.shade700, size: 24),
+            const SizedBox(width: 12),
+            const Text(
+              'Emergency Details',
+              style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildDetailItem('ID', '#${emergency.id}'),
+              _buildDetailItem('Tipe', emergency.type),
+              _buildDetailItem('Status', emergency.status),
+              if (emergency.details != null)
+                _buildDetailItem('Detail', emergency.details!),
+              if (emergency.location != null)
+                _buildDetailItem('Lokasi', emergency.location!),
+              _buildDetailItem(
+                'Dibuat',
+                DateFormat('dd MMM yyyy HH:mm').format(emergency.createdAt),
+              ),
+              _buildDetailItem(
+                'Butuh Relawan',
+                emergency.needVolunteer ? 'Ya' : 'Tidak',
+              ),
+              if (emergency.needVolunteer)
+                _buildDetailItem(
+                  'Jumlah Relawan Dibutuhkan',
+                  emergency.volunteerCount.toString(),
+                ),
+              if (emergency.volunteers.isNotEmpty) ...[
+                const SizedBox(height: 12),
+                const Text(
+                  'Relawan Terdaftar:',
+                  style: TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                ),
+                ...emergency.volunteers.map(
+                  (volunteer) => Padding(
+                    padding: const EdgeInsets.only(top: 4),
+                    child: Text(
+                      '• ${volunteer.userName ?? "Anonim"} - ${volunteer.status}',
+                      style: const TextStyle(fontSize: 12),
+                    ),
+                  ),
+                ),
+              ],
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Tutup'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailItem(String label, String value) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            '$label: ',
+            style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+          ),
+          Expanded(child: Text(value, style: const TextStyle(fontSize: 14))),
+        ],
+      ),
+    );
+  }
 
   void _showEmergencyDialog(BuildContext context, String type) {
     showDialog(
@@ -175,6 +290,10 @@ class _SosScreenState extends State<SosScreen> {
                 'Memberi tahu kontak darurat',
               ),
               _buildSystemFeature(Icons.people_alt, 'Mencari relawan terdekat'),
+              _buildSystemFeature(
+                Icons.assignment_turned_in,
+                'Membuat emergency case dengan ID unik',
+              ),
 
               const SizedBox(height: 20),
 
@@ -235,10 +354,12 @@ class _SosScreenState extends State<SosScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: ElevatedButton(
-                      onPressed: () {
-                        Navigator.pop(context);
-                        _sendEmergencySignal(type);
-                      },
+                      onPressed: _isLoading
+                          ? null
+                          : () {
+                              Navigator.pop(context);
+                              _sendEmergencySignal(type);
+                            },
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.red,
                         padding: const EdgeInsets.symmetric(vertical: 14),
@@ -306,93 +427,94 @@ class _SosScreenState extends State<SosScreen> {
     );
   }
 
-  void _makePhoneCall(String number) {
+  Future<void> _makePhoneCall(String number) async {
+    try {
+      final Uri phoneUri = Uri(scheme: 'tel', path: number);
+      if (await canLaunchUrl(phoneUri)) {
+        await launchUrl(phoneUri);
+      } else {
+        _showErrorSnackbar('Tidak dapat melakukan panggilan');
+      }
+    } catch (e) {
+      _showErrorSnackbar('Error: $e');
+    }
+  }
+
+  void _showCallDialog(String title, String number) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         backgroundColor: Colors.white,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(
+          'Hubungi $title?',
+          style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+          textAlign: TextAlign.center,
+        ),
         content: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const SizedBox(height: 16),
+            const SizedBox(height: 8),
             Text(
-              'Menghubungi $number?',
+              number,
               style: const TextStyle(
-                fontSize: 18,
-                fontWeight: FontWeight.w600,
-                color: Colors.black87,
+                fontSize: 24,
+                fontWeight: FontWeight.bold,
+                color: Colors.red,
               ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 24),
-            Row(
-              children: [
-                // Tombol Batal
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () async {
-                      Navigator.pop(context);
-                      final Uri phoneUri = Uri(scheme: 'tel', path: number);
-                      if (await canLaunchUrl(phoneUri)) {
-                        await launchUrl(phoneUri);
-                      } else {
-                        _showErrorSnackbar('Tidak dapat melakukan panggilan');
-                      }
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.white,
-                      foregroundColor: Colors.red,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                        side: BorderSide(
-                          color: Colors.red.shade400,
-                          width: 1.5,
-                        ),
-                      ),
-                      elevation: 0,
-                    ),
-                    child: const Text(
-                      'Batal',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                // Tombol Hubungi
-                Expanded(
-                  child: ElevatedButton(
-                    onPressed: () {
-                      Navigator.pop(context);
-                      // Implementasi panggilan telepon
-                      // launchUrl(Uri.parse('tel:$number'));
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.green,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      elevation: 2,
-                    ),
-                    child: const Text(
-                      'Hubungi',
-                      style: TextStyle(
-                        color: Colors.white,
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                      ),
-                    ),
-                  ),
-                ),
-              ],
+            const SizedBox(height: 16),
+            const Text(
+              'Pastikan Anda berada dalam keadaan darurat sebelum menghubungi',
+              textAlign: TextAlign.center,
+              style: TextStyle(color: Colors.grey),
             ),
           ],
         ),
+        actions: [
+          Row(
+            children: [
+              Expanded(
+                child: TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  style: TextButton.styleFrom(
+                    foregroundColor: Colors.grey,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Text('Batal'),
+                ),
+              ),
+              const SizedBox(width: 12),
+              Expanded(
+                child: ElevatedButton(
+                  onPressed: () {
+                    Navigator.pop(context);
+                    _makePhoneCall(number);
+                  },
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.green,
+                    padding: const EdgeInsets.symmetric(vertical: 12),
+                    shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                  ),
+                  child: const Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(Icons.phone, size: 18),
+                      SizedBox(width: 8),
+                      Text('Hubungi'),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
       ),
     );
   }
@@ -424,22 +546,68 @@ class _SosScreenState extends State<SosScreen> {
           ),
           child: IconButton(
             icon: Icon(Icons.phone, color: Colors.green.shade700, size: 20),
-            onPressed: () => _makePhoneCall(number),
+            onPressed: () => _showCallDialog(title, number),
           ),
         ),
       ),
     );
   }
 
+  Widget _buildEmergencyItem(Emergency emergency) {
+    return Card(
+      margin: const EdgeInsets.only(bottom: 12),
+      child: ListTile(
+        leading: Container(
+          padding: const EdgeInsets.all(10),
+          decoration: BoxDecoration(
+            color: Colors.red.shade50,
+            shape: BoxShape.circle,
+          ),
+          child: Icon(Icons.emergency, color: Colors.red.shade700, size: 20),
+        ),
+        title: Text(
+          emergency.type,
+          style: const TextStyle(fontWeight: FontWeight.bold),
+        ),
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 4),
+            if (emergency.location != null)
+              Text('Lokasi: ${emergency.location}'),
+            Text('Status: ${emergency.status}'),
+            Text('Butuh Relawan: ${emergency.needVolunteer ? "Ya" : "Tidak"}'),
+            Text(
+              'Dibuat: ${DateFormat('dd/MM HH:mm').format(emergency.createdAt)}',
+              style: const TextStyle(fontSize: 12, color: Colors.grey),
+            ),
+          ],
+        ),
+        trailing: IconButton(
+          icon: Icon(
+            Icons.arrow_forward_ios,
+            color: Colors.grey.shade600,
+            size: 16,
+          ),
+          onPressed: () => _showEmergencyDetails(emergency),
+        ),
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
+      floatingActionButton: FloatingActionButton(
+        onPressed: () => _showEmergencyDialog(context, 'Emergency Umum'),
+        backgroundColor: Colors.red,
+        child: const Icon(Icons.emergency, color: Colors.white),
+      ),
       body: SafeArea(
         child: Column(
           children: [
-            // Header - Fixed height
+            // Header
             Container(
               width: double.infinity,
               decoration: BoxDecoration(
@@ -487,61 +655,12 @@ class _SosScreenState extends State<SosScreen> {
               ),
             ),
 
-            // Content - Expanded dengan SingleChildScrollView
+            // Content
             Expanded(
               child: SingleChildScrollView(
                 padding: const EdgeInsets.all(24),
                 child: Column(
                   children: [
-                    // SOS Button
-                    GestureDetector(
-                      onTap: () =>
-                          _showEmergencyDialog(context, 'Emergency Umum'),
-                      child: Container(
-                        width: 200,
-                        height: 200,
-                        decoration: BoxDecoration(
-                          color: Colors.red.shade50,
-                          shape: BoxShape.circle,
-                          border: Border.all(
-                            color: Colors.red.shade300,
-                            width: 4,
-                          ),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.red.shade200.withOpacity(0.5),
-                              blurRadius: 20,
-                              spreadRadius: 5,
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Icon(
-                              Icons.emergency,
-                              color: Colors.red.shade700,
-                              size: 60,
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              'SOS',
-                              style: TextStyle(
-                                fontSize: 24,
-                                fontWeight: FontWeight.bold,
-                                color: Colors.red.shade700,
-                              ),
-                            ),
-                            Text(
-                              'Tekan untuk darurat',
-                              style: TextStyle(color: Colors.red.shade600),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 32),
-
                     // Emergency Types
                     const Text(
                       'Jenis Emergency',
@@ -568,23 +687,43 @@ class _SosScreenState extends State<SosScreen> {
                           Icons.fire_truck,
                         ),
                         _buildEmergencyTypeButton('Keamanan', Icons.security),
+                        _buildEmergencyTypeButton('Bencana Alam', Icons.nature),
+                        _buildEmergencyTypeButton('Lainnya', Icons.more_horiz),
                       ],
                     ),
                     const SizedBox(height: 32),
 
-                    // // Active Emergencies Section
-                    // if (_activeEmergencies.isNotEmpty) ...[
-                    //   const Text(
-                    //     'Emergency Aktif',
-                    //     style: TextStyle(
-                    //       fontSize: 18,
-                    //       fontWeight: FontWeight.bold,
-                    //     ),
-                    //   ),
-                    //   const SizedBox(height: 16),
-                    //   ..._activeEmergencies.map(_buildEmergencyItem).toList(),
-                    //   const SizedBox(height: 16),
-                    // ],
+                    // Active Emergencies Section
+                    if (_activeEmergencies.isNotEmpty) ...[
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          const Text(
+                            'Emergency Aktif',
+                            style: TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          IconButton(
+                            onPressed: _loadActiveEmergencies,
+                            icon: Icon(
+                              Icons.refresh,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 16),
+                      _isLoadingEmergencies
+                          ? const Center(child: CircularProgressIndicator())
+                          : Column(
+                              children: _activeEmergencies
+                                  .map(_buildEmergencyItem)
+                                  .toList(),
+                            ),
+                      const SizedBox(height: 32),
+                    ],
 
                     // Emergency Contacts Section
                     const Text(
@@ -613,7 +752,13 @@ class _SosScreenState extends State<SosScreen> {
                       Icons.fire_truck,
                       Colors.orange,
                     ),
-                    const SizedBox(height: 20), // Extra padding di bottom
+                    _buildEmergencyContact(
+                      'SAR Nasional',
+                      '115',
+                      Icons.search,
+                      Colors.green,
+                    ),
+                    const SizedBox(height: 20),
                   ],
                 ),
               ),

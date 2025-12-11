@@ -1,14 +1,18 @@
-// home_screen.dart - PERBARUI bagian initState dan tambahkan auth check
 import 'package:flutter/material.dart';
+import 'package:flutter_latihan1/models/notification_model_extension.dart';
+import 'dart:async';
 import '../models/user_model.dart';
 import '../models/announcement_model.dart';
+import '../models/notification_model.dart'; // TAMBAHKAN INI
 import '../services/announcement_service.dart';
-import '../services/auth_service.dart'; // TAMBAHKAN INI
+import '../services/auth_service.dart';
+import '../services/profile_service.dart';
+import '../services/notification_service.dart'; // TAMBAHKAN INI
 import 'sos_screen.dart';
 import 'laporan_screen.dart';
 import 'profile_screen.dart';
 import 'dana_screen.dart';
-import 'login_screen.dart'; // TAMBAHKAN UNTUK LOGOUT
+import 'login_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   final User user;
@@ -26,19 +30,213 @@ class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
   final TextEditingController _searchController = TextEditingController();
   bool _isSearching = false;
-  int _unreadNotifications = 3;
-  List<Map<String, dynamic>> _notifications = [];
+
+  // 🔄 UPDATE: Ganti dengan notifikasi real
+  List<NotificationModel> _notifications = [];
+  int _unreadNotifications = 0;
+  bool _isLoadingNotifications = false;
 
   // TAMBAHKAN: Flag untuk auth check
   bool _isCheckingAuth = true;
   bool _isAuthenticated = false;
 
+  // TAMBAHKAN: User data yang bisa diupdate
+  late User _currentUser;
+
+  // TAMBAHKAN: Flag untuk loading foto profil
+  bool _isLoadingProfile = false;
+
+  // 🔄 TAMBAHKAN: Timer untuk refresh otomatis
+  Timer? _notificationTimer;
+  Timer? _announcementTimer;
+
   @override
   void initState() {
     super.initState();
-    _checkAuthentication(); // PERTAMA, CEK AUTH
-    _initializeNotifications();
+    _currentUser = widget.user;
+    _checkAuthentication();
     _announcementsFuture = AnnouncementService.getAnnouncements();
+
+    // TAMBAHKAN: Load data profil saat init
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadUserProfileData();
+    });
+
+    // 🔄 TAMBAHKAN: Mulai timer untuk refresh otomatis
+    _startAutoRefresh();
+  }
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _notificationTimer?.cancel();
+    _announcementTimer?.cancel();
+    super.dispose();
+  }
+
+  // 🔄 TAMBAHKAN: Fungsi untuk start auto refresh
+  void _startAutoRefresh() {
+    // Refresh notifikasi setiap 30 detik
+    _notificationTimer = Timer.periodic(
+      Duration(seconds: 30),
+      (timer) => _loadNotifications(),
+    );
+
+    // Refresh pengumuman setiap 1 menit
+    _announcementTimer = Timer.periodic(
+      Duration(minutes: 1),
+      (timer) => _refreshAnnouncements(),
+    );
+  }
+
+  // 🔄 UPDATE: Fungsi untuk load notifikasi real
+  Future<void> _loadNotifications({bool showLoading = false}) async {
+    if (_isLoadingNotifications) return;
+
+    try {
+      if (showLoading) {
+        setState(() => _isLoadingNotifications = true);
+      }
+
+      // Load unread count
+      final unreadCount = await NotificationService.getUnreadCount();
+
+      // Load notifications
+      final notifications = await NotificationService.getNotifications(
+        isRead: false,
+        limit: 20,
+      );
+
+      if (mounted) {
+        setState(() {
+          _notifications = notifications;
+          _unreadNotifications = unreadCount;
+        });
+      }
+    } catch (e) {
+      print('⚠️ Error loading notifications: $e');
+      _loadFallbackNotifications();
+    } finally {
+      if (showLoading && mounted) {
+        setState(() => _isLoadingNotifications = false);
+      }
+    }
+  }
+
+  // 🔄 TAMBAHKAN: Fallback notifications untuk development
+  void _loadFallbackNotifications() {
+    setState(() {
+      _notifications = [
+        NotificationModel(
+          id: '1',
+          userId:
+              int.tryParse(widget.user.id.toString()) ?? 1, // Convert ke int
+          type: NotificationType.COMMUNITY,
+          title: 'Kerja Bakti Bersama',
+          message: 'Anda telah bergabung dalam kegiatan kerja bakti',
+          icon: 'people',
+          iconColor: '#10B981',
+          isRead: false,
+          isArchived: false,
+          createdBy: 1,
+          createdAt: DateTime.now().subtract(Duration(minutes: 5)),
+          updatedAt: DateTime.now(),
+        ),
+        NotificationModel(
+          id: '2',
+          userId: int.tryParse(widget.user.id.toString()) ?? 1,
+          type: NotificationType.ANNOUNCEMENT,
+          title: 'Pengumuman Baru',
+          message: 'Ada pengumuman penting dari admin',
+          icon: 'announcement',
+          iconColor: '#3B82F6',
+          isRead: false,
+          isArchived: false,
+          createdBy: 1,
+          createdAt: DateTime.now().subtract(Duration(hours: 1)),
+          updatedAt: DateTime.now(),
+        ),
+      ];
+      _unreadNotifications = 2;
+    });
+  }
+
+  // 🔄 UPDATE: Fungsi untuk mark notification as read
+  void _markNotificationAsRead(String notificationId) async {
+    try {
+      final success = await NotificationService.markAsRead(notificationId);
+
+      if (success) {
+        setState(() {
+          final index = _notifications.indexWhere(
+            (notif) => notif.id == notificationId,
+          );
+          if (index != -1) {
+            _notifications[index] = _notifications[index].copyWith(
+              isRead: true,
+              readAt: DateTime.now(),
+            );
+            _unreadNotifications--;
+          }
+        });
+      }
+    } catch (e) {
+      print('⚠️ Error marking notification as read: $e');
+    }
+  }
+
+  // 🔄 UPDATE: Fungsi untuk mark all notifications as read
+  void _markAllNotificationsAsRead() async {
+    try {
+      final success = await NotificationService.markAllAsRead();
+
+      if (success) {
+        setState(() {
+          _notifications = _notifications.map((notif) {
+            return notif.copyWith(isRead: true, readAt: DateTime.now());
+          }).toList();
+          _unreadNotifications = 0;
+        });
+      }
+    } catch (e) {
+      print('⚠️ Error marking all notifications as read: $e');
+    }
+  }
+
+  // TAMBAHKAN: Fungsi untuk load data profil terbaru dengan handling foto profil
+  Future<void> _loadUserProfileData() async {
+    if (_isLoadingProfile) return;
+
+    try {
+      setState(() => _isLoadingProfile = true);
+
+      final token = await AuthService.getToken();
+      if (token != null && token.isNotEmpty) {
+        final profileData = await ProfileService.getProfile();
+
+        if (mounted) {
+          setState(() {
+            if (profileData['user'] != null) {
+              _currentUser = User.fromJson(profileData['user']);
+            } else if (profileData['id'] != null) {
+              _currentUser = User.fromJson(profileData);
+            }
+
+            // Log untuk debugging foto profil
+            print('🖼️ Profile photo URL: ${_currentUser.fotoProfil}');
+            print(
+              '🖼️ Has foto: ${_currentUser.fotoProfil != null && _currentUser.fotoProfil!.isNotEmpty}',
+            );
+          });
+        }
+      }
+    } catch (e) {
+      print('⚠️ Error loading user profile data in HomeScreen: $e');
+    } finally {
+      if (mounted) {
+        setState(() => _isLoadingProfile = false);
+      }
+    }
   }
 
   // TAMBAHKAN: Fungsi untuk cek authentication
@@ -68,6 +266,12 @@ class _HomeScreenState extends State<HomeScreen> {
         print('⚠️ User mismatch, using widget user');
       }
 
+      // 4. Load data profil terbaru
+      await _loadUserProfileData();
+
+      // 🔄 TAMBAHKAN: Load notifikasi setelah auth berhasil
+      await _loadNotifications(showLoading: true);
+
       setState(() {
         _isAuthenticated = true;
         _isCheckingAuth = false;
@@ -95,36 +299,323 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _logout() async {
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Keluar' ),
-        content: const Text('Apakah Anda yakin ingin keluar dari aplikasi?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Batal'),
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        child: Container(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Icon peringatan
+              Center(
+                child: Container(
+                  width: 60,
+                  height: 60,
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(
+                    Icons.exit_to_app_rounded,
+                    color: Colors.red.shade600,
+                    size: 32,
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 20),
+
+              // Judul
+              const Center(
+                child: Text(
+                  'Keluar',
+                  style: TextStyle(fontSize: 20, fontWeight: FontWeight.bold),
+                ),
+              ),
+
+              const SizedBox(height: 12),
+
+              // Pesan konfirmasi
+              const Center(
+                child: Text(
+                  'Apakah Anda yakin ingin keluar dari aplikasi?',
+                  textAlign: TextAlign.center,
+                  style: TextStyle(
+                    fontSize: 15,
+                    color: Colors.grey,
+                    height: 1.4,
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 28),
+
+              // Tombol aksi
+              Row(
+                children: [
+                  // Tombol Batal
+                  Expanded(
+                    child: OutlinedButton(
+                      onPressed: () => Navigator.pop(context),
+                      style: OutlinedButton.styleFrom(
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        side: BorderSide(color: Colors.grey.shade300),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                      ),
+                      child: Text(
+                        'Batal',
+                        style: TextStyle(
+                          color: Colors.grey.shade700,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  const SizedBox(width: 12),
+
+                  // Tombol Keluar
+                  Expanded(
+                    child: ElevatedButton(
+                      onPressed: () async {
+                        Navigator.pop(context);
+                        await AuthService.logout();
+                        _redirectToLogin();
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red.shade600,
+                        padding: const EdgeInsets.symmetric(vertical: 14),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        elevation: 0,
+                      ),
+                      child: const Text(
+                        'Keluar',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ],
           ),
-          ElevatedButton(
-            onPressed: () async {
-              Navigator.pop(context);
-              await AuthService.logout();
-              _redirectToLogin();
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Colors.red),
-            child: const Text('Keluar', style: TextStyle(color: Colors.white),),
-          ),
-        ],
+        ),
       ),
     );
   }
 
-  // MODIFIKASI: Fungsi _showProfile untuk handle logout
+  // MODIFIKASI: Widget untuk menampilkan foto profil
+  Widget _buildProfileAvatar({double size = 48}) {
+    if (_isLoadingProfile) {
+      return Container(
+        width: size,
+        height: size,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Colors.white,
+          border: Border.all(color: Colors.white, width: 2),
+        ),
+        child: Center(
+          child: CircularProgressIndicator(
+            strokeWidth: 2,
+            valueColor: AlwaysStoppedAnimation<Color>(Colors.blue.shade600),
+          ),
+        ),
+      );
+    }
+
+    // Cek apakah ada foto profil dari API
+    final hasPhoto =
+        _currentUser.fotoProfil != null &&
+        _currentUser.fotoProfil!.isNotEmpty &&
+        _currentUser.fotoProfil!.startsWith('http');
+
+    // Cek apakah ada inisial nama dari user
+    final userName =
+        _currentUser.namaLengkap ?? _currentUser.email.split('@')[0];
+    final initials = _getInitials(userName);
+
+    return Container(
+      width: size,
+      height: size,
+      decoration: BoxDecoration(
+        shape: BoxShape.circle,
+        border: Border.all(color: Colors.white, width: 2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.blue.shade800.withOpacity(0.3),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: hasPhoto
+          ? ClipOval(
+              child: Image.network(
+                _currentUser.fotoProfil!,
+                fit: BoxFit.cover,
+                width: size,
+                height: size,
+                loadingBuilder: (context, child, loadingProgress) {
+                  if (loadingProgress == null) return child;
+                  return Container(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        colors: [Colors.white, _getColorFromName(userName)],
+                        begin: Alignment.topLeft,
+                        end: Alignment.bottomRight,
+                      ),
+                    ),
+                    child: Center(
+                      child: CircularProgressIndicator(
+                        value: loadingProgress.expectedTotalBytes != null
+                            ? loadingProgress.cumulativeBytesLoaded /
+                                  loadingProgress.expectedTotalBytes!
+                            : null,
+                        strokeWidth: 2,
+                        valueColor: AlwaysStoppedAnimation<Color>(
+                          Colors.blue.shade600,
+                        ),
+                      ),
+                    ),
+                  );
+                },
+                errorBuilder: (context, error, stackTrace) {
+                  return _buildInitialsAvatar(userName, initials, size);
+                },
+              ),
+            )
+          : _buildInitialsAvatar(userName, initials, size),
+    );
+  }
+
+  // TAMBAHKAN: Fungsi untuk membuat avatar dengan inisial
+  Widget _buildInitialsAvatar(String userName, String initials, double size) {
+    final color = _getColorFromName(userName);
+
+    return Container(
+      width: size,
+      height : size, 
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [color.withOpacity(0.9), color.withOpacity(0.7)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        shape: BoxShape.circle
+      ),
+      child: Center(
+        child: FittedBox(
+          // TAMBAHKAN: Gunakan FittedBox
+          fit: BoxFit.scaleDown,
+          child: Padding(
+            padding: const EdgeInsets.all(8.0),
+            child: Text(
+              initials,
+              style: TextStyle(
+                color: Colors.white,
+                fontSize: size * 0.3, // PERKECIL sedikit ukuran font
+                fontWeight: FontWeight.bold,
+                height: 1.0, // TAMBAHKAN: Set height ke 1.0
+              ),
+              textAlign: TextAlign.center,
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // TAMBAHKAN: Fungsi untuk mendapatkan inisial dari nama
+  String _getInitials(String name) {
+    final nameParts = name.trim().split(' ');
+    if (nameParts.length >= 2) {
+      return '${nameParts[0][0]}${nameParts[1][0]}'.toUpperCase();
+    } else if (nameParts[0].isNotEmpty) {
+      return nameParts[0][0].toUpperCase();
+    }
+    return 'U';
+  }
+
+  // TAMBAHKAN: Fungsi untuk mendapatkan warna konsisten berdasarkan nama
+  Color _getColorFromName(String name) {
+    const colors = [
+      Colors.blue,
+      Colors.green,
+      Colors.orange,
+      Colors.purple,
+      Colors.teal,
+      Colors.pink,
+      Colors.indigo,
+      Colors.cyan,
+      Colors.amber,
+      Colors.deepPurple,
+    ];
+
+    // Gunakan hash nama untuk menentukan warna yang konsisten
+    final hashCode = name.hashCode.abs();
+    return colors[hashCode % colors.length];
+  }
+
+  // MODIFIKASI: Fungsi _buildProfileMenuItem dengan visual yang lebih baik
+  Widget _buildProfileMenuItem({
+    required IconData icon,
+    required String text,
+    required Color color,
+    required VoidCallback onTap,
+    bool isLogout = false,
+  }) {
+    return ListTile(
+      leading: Container(
+        width: 40,
+        height: 40,
+        decoration: BoxDecoration(
+          color: isLogout ? Colors.red.shade50 : color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(10),
+        ),
+        child: Icon(
+          icon,
+          color: isLogout ? Colors.red.shade600 : color,
+          size: 22,
+        ),
+      ),
+      title: Text(
+        text,
+        style: TextStyle(
+          fontSize: 15,
+          fontWeight: FontWeight.w500,
+          color: isLogout ? Colors.red.shade700 : Colors.grey.shade800,
+        ),
+      ),
+      trailing: Icon(
+        Icons.chevron_right_rounded,
+        color: isLogout ? Colors.red.shade400 : Colors.grey.shade400,
+      ),
+      onTap: onTap,
+      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+    );
+  }
+
+  // MODIFIKASI: Menu profile dengan foto yang sama
   void _showProfile() {
+    // Refresh data profil sebelum menampilkan
+    _loadUserProfileData();
+
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
-      isScrollControlled: false,
+      isScrollControlled: true,
       builder: (context) => Container(
-        height: 280, // Fixed height untuk lebih rapi
+        height: MediaQuery.of(context).size.height * 0.35,
         decoration: const BoxDecoration(
           color: Colors.white,
           borderRadius: BorderRadius.only(
@@ -145,39 +636,35 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ),
 
-            // Header profil
+            // Header profil dengan foto yang sama
             Padding(
               padding: const EdgeInsets.all(20),
               child: Row(
                 children: [
-                  CircleAvatar(
-                    radius: 28,
-                    backgroundColor: Colors.blue.shade100,
-                    child: Icon(
-                      Icons.person,
-                      color: Colors.blue.shade700,
-                      size: 30,
-                    ),
-                  ),
+                  _buildProfileAvatar(size: 60),
                   const SizedBox(width: 16),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          widget.user.name ?? 'User',
+                          _currentUser.namaLengkap ?? 'User',
                           style: const TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 4),
                         Text(
-                          widget.user.email,
+                          _currentUser.email,
                           style: TextStyle(
                             fontSize: 14,
                             color: Colors.grey.shade600,
                           ),
+                          maxLines: 1,
+                          overflow: TextOverflow.ellipsis,
                         ),
                         const SizedBox(height: 8),
                         Container(
@@ -191,7 +678,7 @@ class _HomeScreenState extends State<HomeScreen> {
                             border: Border.all(color: Colors.blue.shade100),
                           ),
                           child: Text(
-                            widget.user.role?.toUpperCase() ?? 'USER',
+                            _currentUser.role?.toUpperCase() ?? 'USER',
                             style: TextStyle(
                               fontSize: 11,
                               color: Colors.blue.shade700,
@@ -211,11 +698,11 @@ class _HomeScreenState extends State<HomeScreen> {
             // Menu opsi
             Expanded(
               child: ListView(
-                padding: const EdgeInsets.symmetric(vertical: 12),
+                padding: const EdgeInsets.symmetric(vertical: 8),
                 children: [
                   _buildProfileMenuItem(
-                    icon: Icons.settings_outlined,
-                    text: 'Pengaturan',
+                    icon: Icons.person_outline,
+                    text: 'Profil Saya',
                     color: Colors.blue.shade600,
                     onTap: () {
                       Navigator.pop(context);
@@ -223,33 +710,22 @@ class _HomeScreenState extends State<HomeScreen> {
                         context,
                         MaterialPageRoute(
                           builder: (context) =>
-                              ProfileScreen(user: widget.user),
+                              ProfileScreen(user: _currentUser),
                         ),
-                      );
+                      ).then((_) {
+                        // Refresh data profil setelah kembali dari ProfileScreen
+                        _loadUserProfileData();
+                      });
                     },
                   ),
 
-                  _buildProfileMenuItem(
-                    icon: Icons.help_outline,
-                    text: 'Bantuan & Dukungan',
-                    color: Colors.purple.shade600,
-                    onTap: () {
-                      Navigator.pop(context);
-                      // Navigate to help screen
-                    },
-                  ),
+                  const SizedBox(height: 8),
 
-                  _buildProfileMenuItem(
-                    icon: Icons.privacy_tip_outlined,
-                    text: 'Privasi & Keamanan',
-                    color: Colors.green.shade600,
-                    onTap: () {
-                      Navigator.pop(context);
-                      // Navigate to privacy screen
-                    },
+                  // Separator untuk logout
+                  Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    child: Divider(color: Colors.grey.shade200, thickness: 1),
                   ),
-
-                  const Divider(height: 20, thickness: 1),
 
                   _buildProfileMenuItem(
                     icon: Icons.logout_rounded,
@@ -259,6 +735,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       Navigator.pop(context);
                       _logout();
                     },
+                    isLogout: true,
                   ),
                 ],
               ),
@@ -269,35 +746,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildProfileMenuItem({
-    required IconData icon,
-    required String text,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return ListTile(
-      leading: Container(
-        width: 40,
-        height: 40,
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(10),
-        ),
-        child: Icon(icon, color: color, size: 22),
-      ),
-      title: Text(
-        text,
-        style: TextStyle(
-          fontSize: 15,
-          fontWeight: FontWeight.w500,
-          color: text == 'Keluar' ? Colors.red.shade700 : Colors.grey.shade800,
-        ),
-      ),
-      trailing: Icon(Icons.chevron_right_rounded, color: Colors.grey.shade400),
-      onTap: onTap,
-      contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-    );
-  }
   // TAMBAHKAN: Loading saat cek auth
   Widget _buildAuthChecking() {
     return const Scaffold(
@@ -359,76 +807,14 @@ class _HomeScreenState extends State<HomeScreen> {
       case 0:
         return _buildHomeContent();
       case 1:
-        return SosScreen(user: widget.user);
+        return SosScreen(user: _currentUser);
       case 2:
-        return LaporanScreen(user: widget.user);
+        return LaporanScreen(user: _currentUser);
       case 3:
-        return DanaScreen(user: widget.user);
+        return DanaScreen(user: _currentUser);
       default:
         return _buildHomeContent();
     }
-  }
-
-  // Inisialisasi data notifikasi
-  void _initializeNotifications() {
-    _notifications = [
-      {
-        'id': 1,
-        'icon': Icons.people_alt_rounded,
-        'title': 'Kerja Bakti Bersama',
-        'message': 'Anda telah bergabung dalam kegiatan kerja bakti',
-        'time': 'Baru saja',
-        'color': Colors.green,
-        'isRead': false,
-      },
-      {
-        'id': 2,
-        'icon': Icons.announcement_rounded,
-        'title': 'Pengumuman Baru',
-        'message': 'Ada pengumuman penting dari admin',
-        'time': '1 jam lalu',
-        'color': Colors.blue,
-        'isRead': false,
-      },
-      {
-        'id': 3,
-        'icon': Icons.warning_amber_rounded,
-        'title': 'Peringatan Cuaca',
-        'message': 'Hari ini diperkirakan hujan lebat',
-        'time': '2 jam lalu',
-        'color': Colors.orange,
-        'isRead': false,
-      },
-      {
-        'id': 4,
-        'icon': Icons.event_available_rounded,
-        'title': 'Acara Mendatang',
-        'message': 'Rapat warga akan dilaksanakan besok',
-        'time': '5 jam lalu',
-        'color': Colors.purple,
-        'isRead': true,
-      },
-      {
-        'id': 5,
-        'icon': Icons.security_rounded,
-        'title': 'Keamanan Lingkungan',
-        'message': 'Laporan keamanan telah diproses',
-        'time': '1 hari lalu',
-        'color': Colors.red,
-        'isRead': true,
-      },
-    ];
-
-    // Hitung notifikasi yang belum dibaca
-    _unreadNotifications = _notifications
-        .where((notif) => !notif['isRead'])
-        .length;
-  }
-
-  @override
-  void dispose() {
-    _searchController.dispose();
-    super.dispose();
   }
 
   Widget _buildHomeContent() {
@@ -462,6 +848,9 @@ class _HomeScreenState extends State<HomeScreen> {
     setState(() {
       _announcementsFuture = AnnouncementService.getAnnouncements();
     });
+
+    // 🔄 TAMBAHKAN: Refresh notifikasi juga
+    await _loadNotifications();
   }
 
   void _onItemTapped(int index) {
@@ -499,32 +888,11 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  // Method untuk menandai notifikasi sebagai sudah dibaca
-  void _markNotificationAsRead(int notificationId) {
-    setState(() {
-      for (var notif in _notifications) {
-        if (notif['id'] == notificationId && !notif['isRead']) {
-          notif['isRead'] = true;
-          _unreadNotifications--;
-          break;
-        }
-      }
-    });
-  }
-
-  // Method untuk menandai semua notifikasi sebagai sudah dibaca
-  void _markAllNotificationsAsRead() {
-    setState(() {
-      for (var notif in _notifications) {
-        if (!notif['isRead']) {
-          notif['isRead'] = true;
-        }
-      }
-      _unreadNotifications = 0;
-    });
-  }
-
+  // 🔄 UPDATE: Fungsi untuk show notifications dengan data real
   void _showNotifications() {
+    // Refresh notifikasi sebelum menampilkan
+    _loadNotifications();
+
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
@@ -572,7 +940,10 @@ class _HomeScreenState extends State<HomeScreen> {
                     const Spacer(),
                     if (_unreadNotifications > 0)
                       GestureDetector(
-                        onTap: _markAllNotificationsAsRead,
+                        onTap: () {
+                          _markAllNotificationsAsRead();
+                          Navigator.pop(context);
+                        },
                         child: Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 12,
@@ -582,13 +953,23 @@ class _HomeScreenState extends State<HomeScreen> {
                             color: Colors.white.withOpacity(0.2),
                             borderRadius: BorderRadius.circular(12),
                           ),
-                          child: Text(
-                            '$_unreadNotifications Baru',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 12,
-                              fontWeight: FontWeight.w600,
-                            ),
+                          child: Row(
+                            children: [
+                              Icon(
+                                Icons.done_all,
+                                color: Colors.white,
+                                size: 16,
+                              ),
+                              const SizedBox(width: 4),
+                              Text(
+                                '$_unreadNotifications Baru',
+                                style: const TextStyle(
+                                  color: Colors.white,
+                                  fontSize: 12,
+                                  fontWeight: FontWeight.w600,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ),
@@ -596,30 +977,23 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.all(16),
-                  children: [
-                    if (_notifications.isEmpty)
-                      _buildEmptyNotifications()
-                    else
-                      ..._notifications.map((notification) {
-                        return Column(
-                          children: [
-                            _buildNotificationItem(
-                              notification['icon'],
-                              notification['title'],
-                              notification['message'],
-                              notification['time'],
-                              notification['color'],
-                              notification['isRead'],
-                              notification['id'],
-                            ),
-                            const SizedBox(height: 12),
-                          ],
-                        );
-                      }).toList(),
-                  ],
-                ),
+                child: _isLoadingNotifications
+                    ? Center(child: CircularProgressIndicator())
+                    : _notifications.isEmpty
+                    ? _buildEmptyNotifications()
+                    : ListView(
+                        padding: const EdgeInsets.all(16),
+                        children: [
+                          ..._notifications.map((notification) {
+                            return Column(
+                              children: [
+                                _buildNotificationItem(notification),
+                                const SizedBox(height: 12),
+                              ],
+                            );
+                          }).toList(),
+                        ],
+                      ),
               ),
             ],
           ),
@@ -629,27 +1003,20 @@ class _HomeScreenState extends State<HomeScreen> {
       // Update badge count setelah modal ditutup
       setState(() {
         _unreadNotifications = _notifications
-            .where((notif) => !notif['isRead'])
+            .where((notif) => !notif.isRead)
             .length;
       });
     });
   }
 
-  Widget _buildNotificationItem(
-    IconData icon,
-    String title,
-    String message,
-    String time,
-    Color color,
-    bool isRead,
-    int notificationId,
-  ) {
+  // 🔄 UPDATE: Widget untuk menampilkan notifikasi real
+  Widget _buildNotificationItem(NotificationModel notification) {
     return GestureDetector(
       onTap: () {
-        if (!isRead) {
-          _markNotificationAsRead(notificationId);
+        if (!notification.isRead) {
+          _markNotificationAsRead(notification.id);
         }
-        // Tambahkan aksi lain jika diperlukan
+        _handleNotificationAction(notification);
       },
       child: Container(
         decoration: BoxDecoration(
@@ -669,37 +1036,45 @@ class _HomeScreenState extends State<HomeScreen> {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
+              color: notification.color.withOpacity(0.1),
               shape: BoxShape.circle,
             ),
-            child: Icon(icon, color: color, size: 20),
+            child: Icon(
+              notification.iconData,
+              color: notification.color,
+              size: 20,
+            ),
           ),
           title: Text(
-            title,
+            notification.title,
             style: TextStyle(
               fontWeight: FontWeight.w600,
               fontSize: 14,
-              color: isRead ? Colors.grey.shade600 : Colors.black87,
+              color: notification.isRead
+                  ? Colors.grey.shade600
+                  : Colors.black87,
             ),
           ),
           subtitle: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(
-                message,
+                notification.message,
                 style: TextStyle(
-                  color: isRead ? Colors.grey.shade500 : Colors.grey.shade600,
+                  color: notification.isRead
+                      ? Colors.grey.shade500
+                      : Colors.grey.shade600,
                   fontSize: 12,
                 ),
               ),
               const SizedBox(height: 4),
               Text(
-                time,
+                notification.timeAgo,
                 style: TextStyle(color: Colors.grey.shade400, fontSize: 10),
               ),
             ],
           ),
-          trailing: !isRead
+          trailing: !notification.isRead
               ? Container(
                   width: 8,
                   height: 8,
@@ -710,6 +1085,109 @@ class _HomeScreenState extends State<HomeScreen> {
                 )
               : const SizedBox(width: 8),
         ),
+      ),
+    );
+  }
+
+  // 🔄 TAMBAHKAN: Handle notification action
+  void _handleNotificationAction(NotificationModel notification) {
+    final data = notification.data;
+    if (data != null && data['action'] != null) {
+      switch (data['action']) {
+        case 'view_announcement':
+          final announcementId = data['announcementId'];
+          _showAnnouncementDetailsById(announcementId);
+          break;
+        case 'view_bill':
+          final billId = data['billId'];
+          _showBillDetails(billId);
+          break;
+        case 'view_payment':
+          final paymentId = data['paymentId'];
+          _showPaymentDetails(paymentId);
+          break;
+        case 'view_emergency':
+          final emergencyId = data['emergencyId'];
+          _showEmergencyDetails(emergencyId);
+          break;
+        case 'view_report':
+          final reportId = data['reportId'];
+          _showReportDetails(reportId);
+          break;
+        case 'view_profile':
+          _showProfile();
+          break;
+      }
+    }
+  }
+
+  // 🔄 TAMBAHKAN: Fungsi untuk menampilkan detail berdasarkan ID
+  void _showAnnouncementDetailsById(int announcementId) {
+    final announcement = _announcements.firstWhere(
+      (a) => a.id == announcementId,
+      orElse: () => Announcement(
+        id: 0,
+        title: 'Pengumuman',
+        description: 'Detail pengumuman',
+        targetAudience: 'Semua warga',
+        date: DateTime.now(),
+        day: 'Hari ini', // ✅ HARUS ADA karena required
+        createdAt: DateTime.now(),
+        admin: Admin(
+          // ✅ Gunakan Admin bukan User
+          id: 0,
+          namaLengkap: 'Admin',
+          email: 'admin@example.com',
+        ),
+      ),
+    );
+
+    _showAnnouncementDetails(announcement);
+  }
+
+  // 🔄 TAMBAHKAN: Fungsi untuk menampilkan detail tagihan
+  void _showBillDetails(String billId) {
+    // Navigasi ke screen tagihan
+    // Navigator.push(
+    //   context,
+    //   MaterialPageRoute(
+    //     builder: (context) => BillDetailScreen(billId: billId),
+    //   ),
+    // );
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Melihat detail tagihan: $billId'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  // 🔄 TAMBAHKAN: Fungsi untuk menampilkan detail pembayaran
+  void _showPaymentDetails(int paymentId) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Melihat detail pembayaran: $paymentId'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  // 🔄 TAMBAHKAN: Fungsi untuk menampilkan detail emergency
+  void _showEmergencyDetails(int emergencyId) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Melihat detail emergency: $emergencyId'),
+        duration: Duration(seconds: 2),
+      ),
+    );
+  }
+
+  // 🔄 TAMBAHKAN: Fungsi untuk menampilkan detail laporan
+  void _showReportDetails(int reportId) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text('Melihat detail laporan: $reportId'),
+        duration: Duration(seconds: 2),
       ),
     );
   }
@@ -739,12 +1217,16 @@ class _HomeScreenState extends State<HomeScreen> {
             textAlign: TextAlign.center,
             style: TextStyle(color: Colors.grey.shade500, fontSize: 14),
           ),
+          const SizedBox(height: 20),
+          ElevatedButton.icon(
+            onPressed: _loadNotifications,
+            icon: Icon(Icons.refresh),
+            label: Text('Refresh'),
+          ),
         ],
       ),
     );
   }
-
-  // Method untuk membuka profile dari header
 
   void _joinWorkActivity() {
     showDialog(
@@ -1028,8 +1510,7 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  // === HEADER YANG DIPERBAIKI ===
-  // === HEADER YANG DIPERBAIKI ===
+  // === HEADER YANG DIPERBAIKI - DENGAN FOTO PROFIL YANG SAMA ===
   Widget _buildHeader() {
     return Container(
       width: double.infinity,
@@ -1051,36 +1532,18 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
+      padding: const EdgeInsets.fromLTRB(20, 20, 20, 30),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              // Profile dengan design lebih bagus - DIFUNGSIKAN
+              // Foto Profil yang sama dengan ProfileScreen
               GestureDetector(
                 onTap: _showProfile,
-                child: Container(
-                  padding: const EdgeInsets.all(2),
-                  decoration: BoxDecoration(
-                    shape: BoxShape.circle,
-                    gradient: LinearGradient(
-                      colors: [Colors.white, Colors.blue.shade100],
-                    ),
-                  ),
-                  child: CircleAvatar(
-                    radius: 22,
-                    backgroundColor: Colors.white,
-                    child: Icon(
-                      Icons.person,
-                      color: Colors.blue.shade600,
-                      size: 24,
-                    ),
-                  ),
-                ),
+                child: _buildProfileAvatar(),
               ),
-              // Notifikasi dengan badge - DIFUNGSIKAN
               GestureDetector(
                 onTap: _showNotifications,
                 child: Stack(
@@ -1091,7 +1554,7 @@ class _HomeScreenState extends State<HomeScreen> {
                         color: Colors.white.withOpacity(0.2),
                         shape: BoxShape.circle,
                       ),
-                      child: Icon(
+                      child: const Icon(
                         Icons.notifications_outlined,
                         color: Colors.white,
                         size: 24,
@@ -1112,7 +1575,9 @@ class _HomeScreenState extends State<HomeScreen> {
                             minHeight: 16,
                           ),
                           child: Text(
-                            '$_unreadNotifications',
+                            _unreadNotifications > 9
+                                ? '9+'
+                                : '$_unreadNotifications',
                             style: const TextStyle(
                               color: Colors.white,
                               fontSize: 10,
@@ -1127,9 +1592,12 @@ class _HomeScreenState extends State<HomeScreen> {
               ),
             ],
           ),
+
           const SizedBox(height: 20),
+
+          // MODIFIKASI: Gunakan _currentUser.namaLengkap bukan widget.user.name
           Text(
-            'Hai, ${widget.user.name?.split(' ')[0] ?? 'User'}!',
+            'Hai, ${_currentUser.namaLengkap?.split(' ')[0] ?? 'User'}!',
             style: const TextStyle(
               fontSize: 28,
               fontWeight: FontWeight.bold,
@@ -1146,76 +1614,79 @@ class _HomeScreenState extends State<HomeScreen> {
               fontWeight: FontWeight.w400,
             ),
           ),
+
           const SizedBox(height: 24),
-          // Search bar yang lebih modern - DIPERBAIKI
-          Container(
-            height: 50,
-            decoration: BoxDecoration(
+
+          // Search Bar
+          ClipRRect(
+            borderRadius: BorderRadius.circular(25),
+            child: Container(
+              height: 50,
               color: Colors.white,
-              borderRadius: BorderRadius.circular(25),
-              boxShadow: [
-                BoxShadow(
-                  color: Colors.black.withOpacity(0.1),
-                  blurRadius: 15,
-                  offset: const Offset(0, 5),
-                ),
-              ],
-            ),
-            child: Row(
-              children: [
-                const SizedBox(width: 16),
-                Icon(Icons.search, color: Colors.blue.shade400, size: 20),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: TextField(
-                    controller: _searchController,
-                    decoration: InputDecoration(
-                      hintText: 'Cari pengumuman, kegiatan, atau informasi...',
-                      border: InputBorder.none,
-                      hintStyle: TextStyle(
-                        color: Colors.grey.shade500,
+              child: Row(
+                children: [
+                  const SizedBox(width: 16),
+                  Icon(Icons.search, color: Colors.blue.shade400, size: 20),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: TextField(
+                      controller: _searchController,
+                      decoration: const InputDecoration(
+                        hintText:
+                            'Cari pengumuman, kegiatan, atau informasi...',
+                        border: InputBorder.none,
+                        focusedBorder: InputBorder.none,
+                        enabledBorder: InputBorder.none,
+                        errorBorder: InputBorder.none,
+                        disabledBorder: InputBorder.none,
+                        focusedErrorBorder: InputBorder.none,
+                        contentPadding: EdgeInsets.zero,
+                        hintStyle: TextStyle(color: Colors.grey, fontSize: 14),
+                      ),
+                      style: TextStyle(
                         fontSize: 14,
+                        color: Colors.grey.shade800,
+                        height: 2.0,
                       ),
+                      onChanged: _handleSearch,
                     ),
-                    style: TextStyle(fontSize: 14, color: Colors.grey.shade800),
-                    onChanged: _handleSearch,
                   ),
-                ),
-                if (_isSearching)
-                  IconButton(
-                    icon: Icon(
-                      Icons.clear,
-                      color: Colors.grey.shade500,
-                      size: 20,
-                    ),
-                    onPressed: _clearSearch,
-                  )
-                else
-                  // TOMBOL FILTER YANG DIPERBAIKI
-                  Padding(
-                    padding: const EdgeInsets.only(right: 8),
-                    child: Container(
-                      width: 36,
-                      height: 36,
-                      decoration: BoxDecoration(
-                        color: Colors.blue.shade50,
-                        shape: BoxShape.circle,
-                      ),
+                  // Tombol aksi
+                  if (_isSearching)
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
                       child: IconButton(
                         icon: Icon(
-                          Icons.filter_list_rounded,
-                          color: Colors.blue.shade600,
-                          size: 18,
+                          Icons.clear,
+                          color: Colors.grey.shade500,
+                          size: 20,
                         ),
-                        onPressed: () {
-                          // Tambahkan fungsi filter di sini
-                          _showFilterOptions();
-                        },
-                        padding: EdgeInsets.zero,
+                        onPressed: _clearSearch,
+                      ),
+                    )
+                  else
+                    Padding(
+                      padding: const EdgeInsets.only(right: 8),
+                      child: Container(
+                        width: 36,
+                        height: 36,
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          shape: BoxShape.circle,
+                        ),
+                        child: IconButton(
+                          icon: Icon(
+                            Icons.filter_list_rounded,
+                            color: Colors.blue.shade600,
+                            size: 18,
+                          ),
+                          onPressed: _showFilterOptions,
+                          padding: EdgeInsets.zero,
+                        ),
                       ),
                     ),
-                  ),
-              ],
+                ],
+              ),
             ),
           ),
         ],
@@ -1776,7 +2247,6 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-
   Widget _buildEmptySearchResults() {
     return Container(
       padding: const EdgeInsets.all(20),
@@ -2021,11 +2491,7 @@ class _HomeScreenState extends State<HomeScreen> {
           _buildNavItem(Icons.home_filled, 'Home', 0),
           _buildNavItem(Icons.emergency_outlined, 'SOS', 1),
           _buildNavItem(Icons.report_outlined, 'Laporan', 2),
-          _buildNavItem(
-            Icons.account_balance_wallet_outlined,
-            'Dana',
-            3,
-          ), // Ganti Profile dengan Dana
+          _buildNavItem(Icons.account_balance_wallet_outlined, 'Dana', 3),
         ],
       ),
     );

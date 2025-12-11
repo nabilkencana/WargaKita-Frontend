@@ -9,7 +9,7 @@ class Emergency {
   final bool needVolunteer;
   final int volunteerCount;
   final String status;
-  final String? userId;
+  final int? userId; // Diubah dari String? ke int?
   final DateTime createdAt;
   final DateTime updatedAt;
   final List<Volunteer> volunteers;
@@ -32,21 +32,21 @@ class Emergency {
 
   factory Emergency.fromJson(Map<String, dynamic> json) {
     return Emergency(
-      id: json['id'],
-      type: json['type'],
-      details: json['details'],
-      location: json['location'],
-      latitude: json['latitude'],
-      longitude: json['longitude'],
-      needVolunteer: json['needVolunteer'] ?? false,
-      volunteerCount: json['volunteerCount'] ?? 0,
-      status: json['status'],
-      userId: json['userId']?.toString(),
-      createdAt: DateTime.parse(json['createdAt']),
-      updatedAt: DateTime.parse(json['updatedAt']),
+      id: json['id'] as int,
+      type: json['type'] as String,
+      details: json['details'] as String?,
+      location: json['location'] as String?,
+      latitude: json['latitude'] as String?,
+      longitude: json['longitude'] as String?,
+      needVolunteer: json['needVolunteer'] as bool? ?? false,
+      volunteerCount: (json['volunteerCount'] as int?) ?? 0,
+      status: json['status'] as String,
+      userId: json['userId'] as int?,
+      createdAt: DateTime.parse(json['createdAt'] as String),
+      updatedAt: DateTime.parse(json['updatedAt'] as String),
       volunteers:
           (json['volunteers'] as List<dynamic>?)
-              ?.map((v) => Volunteer.fromJson(v))
+              ?.map((v) => Volunteer.fromJson(v as Map<String, dynamic>))
               .toList() ??
           [],
     );
@@ -69,7 +69,7 @@ class Emergency {
 class Volunteer {
   final int id;
   final int emergencyId;
-  final String? userId;
+  final int? userId; // Diubah dari String? ke int?
   final String? userName;
   final String? userPhone;
   final String? skills;
@@ -91,15 +91,15 @@ class Volunteer {
 
   factory Volunteer.fromJson(Map<String, dynamic> json) {
     return Volunteer(
-      id: json['id'],
-      emergencyId: json['emergencyId'],
-      userId: json['userId']?.toString(),
-      userName: json['userName'],
-      userPhone: json['userPhone'],
-      skills: json['skills'],
-      status: json['status'],
-      createdAt: DateTime.parse(json['createdAt']),
-      updatedAt: DateTime.parse(json['updatedAt']),
+      id: json['id'] as int,
+      emergencyId: json['emergencyId'] as int,
+      userId: json['userId'] as int?,
+      userName: json['userName'] as String?,
+      userPhone: json['userPhone'] as String?,
+      skills: json['skills'] as String?,
+      status: json['status'] as String,
+      createdAt: DateTime.parse(json['createdAt'] as String),
+      updatedAt: DateTime.parse(json['updatedAt'] as String),
     );
   }
 
@@ -108,7 +108,6 @@ class Volunteer {
       'emergencyId': emergencyId,
       'userId': userId,
       'userName': userName,
-      'userPhone': userPhone,
       'skills': skills,
     };
   }
@@ -129,10 +128,10 @@ class EmergencyStats {
 
   factory EmergencyStats.fromJson(Map<String, dynamic> json) {
     return EmergencyStats(
-      total: json['total'],
-      active: json['active'],
-      resolved: json['resolved'],
-      needVolunteers: json['needVolunteers'],
+      total: json['total'] as int,
+      active: json['active'] as int,
+      resolved: json['resolved'] as int,
+      needVolunteers: json['needVolunteers'] as int,
     );
   }
 }
@@ -145,7 +144,7 @@ class CreateSOSRequest {
   final String? longitude;
   final bool needVolunteer;
   final int volunteerCount;
-  final String? userId;
+  final int? userId; // Diubah dari String? ke int?
 
   CreateSOSRequest({
     required this.type,
@@ -173,13 +172,31 @@ class CreateSOSRequest {
 }
 
 class RegisterVolunteerRequest {
-  final String? userId;
+  final int? userId; // Diubah dari String? ke int?
   final String? userName;
   final String? skills;
+  // userPhone tidak ada di backend, mungkin diambil dari user profile
 
   RegisterVolunteerRequest({this.userId, this.userName, this.skills});
 
   Map<String, dynamic> toJson() {
     return {'userId': userId, 'userName': userName, 'skills': skills};
+  }
+}
+
+// Tambahkan model untuk response error jika perlu
+class ApiError {
+  final String message;
+  final int statusCode;
+  final String? error;
+
+  ApiError({required this.message, required this.statusCode, this.error});
+
+  factory ApiError.fromJson(Map<String, dynamic> json) {
+    return ApiError(
+      message: json['message'] as String,
+      statusCode: json['statusCode'] as int? ?? 500,
+      error: json['error'] as String?,
+    );
   }
 }

@@ -1114,10 +1114,6 @@ class _LaporanScreenState extends State<LaporanScreen> {
                     ),
                   ),
                 ),
-                Text(
-                  '✅ Gambar telah diupload ke Cloudinary',
-                  style: TextStyle(color: Colors.green.shade600, fontSize: 12),
-                ),
                 const SizedBox(height: 8),
               ],
 

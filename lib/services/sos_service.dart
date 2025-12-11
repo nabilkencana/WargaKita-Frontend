@@ -5,8 +5,7 @@ import '../models/sos_model.dart';
 
 class SosService {
   static const String baseUrl =
-      'https://wargakita.canadev.my.id'; // Sesuaikan dengan URL NestJS
-  // static const String baseUrl = 'http://192.168.1.100:3000'; // Untuk mobile
+      'https://wargakita.canadev.my.id'; 
 
   final String _apiUrl = '$baseUrl/emergency';
 
@@ -20,7 +19,8 @@ class SosService {
   void _handleError(http.Response response) {
     if (response.statusCode >= 400) {
       final errorData = json.decode(response.body);
-      throw Exception(errorData['message'] ?? 'Terjadi kesalahan');
+      final message = errorData['message'] ?? 'Terjadi kesalahan';
+      throw Exception(message);
     }
   }
 

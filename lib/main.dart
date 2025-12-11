@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_latihan1/screens/login_screen.dart';
 import 'package:flutter_latihan1/screens/home_screen.dart';
+import 'package:flutter_latihan1/screens/splash_screen.dart';
 import 'package:flutter_latihan1/screens/verify_otp_screen.dart';
 import 'package:flutter_latihan1/models/user_model.dart';
 import 'package:flutter_latihan1/services/auth_service.dart';
@@ -388,7 +389,7 @@ class _MyAppState extends State<MyApp> {
       ),
 
       // Card Theme - PERBAIKAN: gunanakan cardTheme bukan cardTheme
-      cardTheme: CardTheme(
+      cardTheme: CardThemeData(
         color: Colors.white,
         elevation: 4,
         shadowColor: Colors.black.withOpacity(0.08),
@@ -397,7 +398,7 @@ class _MyAppState extends State<MyApp> {
       ),
 
       // Dialog Theme
-      dialogTheme: DialogTheme(
+      dialogTheme: DialogThemeData(
         backgroundColor: Colors.white,
         elevation: 8,
         shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
@@ -414,7 +415,7 @@ class _MyAppState extends State<MyApp> {
       ),
 
       // Chip Theme
-      chipTheme: ChipTheme(
+      chipTheme: ChipThemeData(
         backgroundColor: Colors.blue.shade50,
         selectedColor: Colors.blue.shade700,
         disabledColor: Colors.grey.shade200,
@@ -426,7 +427,7 @@ class _MyAppState extends State<MyApp> {
       ),
 
       // Divider Theme
-      dividerTheme: DividerTheme(
+      dividerTheme: DividerThemeData(
         color: Colors.grey.shade300,
         thickness: 1,
         space: 0,
@@ -435,7 +436,7 @@ class _MyAppState extends State<MyApp> {
       ),
 
       // SnackBar Theme
-      snackBarTheme: SnackBarTheme(
+      snackBarTheme: SnackBarThemeData(
         backgroundColor: Colors.blue.shade800,
         contentTextStyle: const TextStyle(
           fontSize: 14,
@@ -449,7 +450,7 @@ class _MyAppState extends State<MyApp> {
       ),
 
       // Bottom Sheet Theme
-      bottomSheetTheme: BottomSheetTheme(
+      bottomSheetTheme: BottomSheetThemeData(
         backgroundColor: Colors.white,
         elevation: 8,
         shape: const RoundedRectangleBorder(
@@ -460,7 +461,7 @@ class _MyAppState extends State<MyApp> {
       ),
 
       // Floating Action Button Theme
-      floatingActionButtonTheme: FloatingActionButtonTheme(
+      floatingActionButtonTheme: FloatingActionButtonThemeData(
         backgroundColor: Colors.blue.shade700,
         foregroundColor: Colors.white,
         elevation: 4,
@@ -469,7 +470,7 @@ class _MyAppState extends State<MyApp> {
       ),
 
       // Navigation Bar Theme
-      navigationBarTheme: NavigationBarTheme(
+      navigationBarTheme: NavigationBarThemeData(
         backgroundColor: Colors.white,
         elevation: 4,
         indicatorColor: Colors.blue.shade100,
@@ -490,7 +491,7 @@ class _MyAppState extends State<MyApp> {
       ),
 
       // TAMBAHKAN: Scrollbar theme untuk konsistensi
-      scrollbarTheme: ScrollbarTheme(
+      scrollbarTheme: ScrollbarThemeData(
         thumbColor: MaterialStateProperty.resolveWith((states) {
           if (states.contains(MaterialState.hovered)) {
             return Colors.blue.shade700;
@@ -504,7 +505,7 @@ class _MyAppState extends State<MyApp> {
       ),
 
       // TAMBAHKAN: Progress indicator theme
-      progressIndicatorTheme: ProgressIndicatorTheme(
+      progressIndicatorTheme: ProgressIndicatorThemeData(
         color: Colors.blue.shade700,
         linearTrackColor: Colors.blue.shade100,
         circularTrackColor: Colors.blue.shade100,
@@ -535,7 +536,7 @@ class _MyAppState extends State<MyApp> {
         backgroundColor: Colors.grey.shade900,
         foregroundColor: Colors.white,
       ),
-      cardTheme: CardTheme(color: Colors.grey.shade800, elevation: 4),
+      cardTheme: CardThemeData(color: Colors.grey.shade800, elevation: 4),
     );
   }
 

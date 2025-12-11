@@ -64,8 +64,8 @@ class Laporan {
       if (imageUrl != null) 'imageUrl': imageUrl,
       if (imagePublicId != null) 'imagePublicId': imagePublicId,
       if (userId != null) 'userId': userId,
-      if (createdAt != null) 'createdAt': createdAt.toIso8601String(),
-      if (updatedAt != null) 'updatedAt': updatedAt.toIso8601String(),
+      'createdAt': createdAt.toIso8601String(),
+      'updatedAt': updatedAt.toIso8601String(),
       if (user != null) 'user': user,
     };
   }

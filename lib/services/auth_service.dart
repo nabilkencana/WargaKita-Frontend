@@ -278,7 +278,7 @@ class AuthService {
       role:
           responseData['role']?.toString() ??
           responseData['user']['role']?.toString() ??
-          'user',
+          'user', nomorTelepon: '', namaLengkap: '',
     );
   }
 
