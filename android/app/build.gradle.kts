@@ -28,6 +28,10 @@ android {
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
+         // Tambah ini jika belum ada
+        manifestPlaceholders += [
+            'appAuthRedirectScheme': 'com.example.warga_app'  // Ganti dengan package name Anda
+        ]
     }
 
     buildTypes {

@@ -1,4 +1,7 @@
+import 'package:connectivity_plus/connectivity_plus.dart';
+import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
+import 'package:url_launcher/url_launcher.dart';
 import 'package:warga_app/models/user_model.dart';
 import 'package:warga_app/screens/register_screen.dart';
 import 'package:warga_app/screens/home_screen.dart';
@@ -172,11 +175,41 @@ class _LoginScreenState extends State<LoginScreen>
     }
   }
 
-  Future<void> _signInWithGoogle() async {
+Future<void> _signInWithGoogle() async {
+    // Debug info
+    print('🔄 Starting Google Sign In process...');
+
     setState(() => _isGoogleLoading = true);
 
     try {
+      // 1. Cek koneksi internet
+      print('📡 Checking internet connection...');
+      final connectivityResult = await Connectivity().checkConnectivity();
+      if (connectivityResult == ConnectivityResult.none) {
+        _showError(
+          'Tidak ada koneksi internet. Periksa WiFi/mobile data Anda.',
+        );
+        setState(() => _isGoogleLoading = false);
+        return;
+      }
+      print('✅ Internet connection OK');
+
+      // 2. Cek device info
+      print('📱 Checking device info...');
+      final deviceInfo = DeviceInfoPlugin();
+      final androidInfo = await deviceInfo.androidInfo;
+
+      print('📱 Device Details:');
+      print('   Brand: ${androidInfo.brand}');
+      print('   Model: ${androidInfo.model}');
+      print('   Android: ${androidInfo.version.release}');
+      print('   Is Physical: ${androidInfo.isPhysicalDevice}');
+
+      // 3. Direct attempt to Google Sign In
+      print('🔐 Attempting Google Sign In...');
       final AuthResponse result = await _authService.signInWithGoogle();
+
+      print('✅ Google Sign In successful!');
 
       if (result.user != null) {
         _showSuccess('Login dengan Google berhasil!');
@@ -186,10 +219,40 @@ class _LoginScreenState extends State<LoginScreen>
         throw Exception('User data tidak ditemukan dari backend');
       }
     } catch (e) {
-      if (e.toString().contains('ApiException: 10')) {
-        _showGooglePlayServicesError();
+      print('❌ Google Sign In Error: $e');
+      print('❌ Error type: ${e.runtimeType}');
+      print('❌ Error toString: ${e.toString()}');
+
+      // Improved error handling
+      String errorStr = e.toString();
+
+      if (errorStr.contains('sign_in_failed') ||
+          errorStr.contains('SIGN_IN_FAILED') ||
+          errorStr.contains('Google Play Services')) {
+        _showGooglePlayServicesFixDialog();
+      } else if (errorStr.contains('ApiException: 10') ||
+          errorStr.contains('SERVICE_VERSION_UPDATE_REQUIRED')) {
+        _showPlayServicesUpdateDialog();
+      } else if (errorStr.contains('network_error') ||
+          errorStr.contains('SocketException') ||
+          errorStr.contains('ClientException')) {
+        _showError(
+          'Koneksi internet bermasalah. Pastikan WiFi/mobile data aktif dan coba lagi.',
+        );
+      } else if (errorStr.contains('INVALID_ACCOUNT') ||
+          errorStr.contains('USER_NOT_REGISTERED')) {
+        // User belum terdaftar di backend
+        _showGoogleUserNotRegisteredDialog();
+      } else if (errorStr.contains('dibatalkan') ||
+          errorStr.contains('canceled') ||
+          errorStr.contains('CANCELLED')) {
+        // User cancelled, no need to show error
+        print('User cancelled Google Sign In');
       } else {
-        _showGoogleSignInError(e);
+        // Generic error
+        _showError(
+          'Login Google gagal: ${errorStr.replaceAll("Exception: ", "").replaceAll("Error: ", "")}',
+        );
       }
     } finally {
       if (mounted) {
@@ -198,40 +261,120 @@ class _LoginScreenState extends State<LoginScreen>
     }
   }
 
-  void _showGooglePlayServicesError() {
+  void _showPlayServicesUpdateDialog() {
     showDialog(
       context: context,
-      builder: (BuildContext context) => _buildErrorDialog(
-        icon: Icons.error_outline,
-        iconColor: Colors.orange,
-        backgroundColor: Colors.orange.shade50,
-        title: 'Perhatian',
-        message: 'Google Play Services diperlukan untuk login dengan Google',
-        primaryButtonText: 'Perbaiki',
-        primaryButtonAction: () {
-          Navigator.of(context).pop();
-          // TODO: Implement buka Play Store
-        },
+      builder: (context) => AlertDialog(
+        title: Text('Update Diperlukan'),
+        content: Text(
+          'Versi Google Play Services di HP Anda terlalu lama. '
+          'Silakan update melalui Google Play Store untuk melanjutkan login dengan Google.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: Text('Nanti'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _openPlayStoreForGoogleServices();
+            },
+            style: ElevatedButton.styleFrom(backgroundColor: Color(0xFF0D6EFD)),
+            child: Text('Update Sekarang'),
+          ),
+        ],
       ),
     );
   }
 
-  void _showEmailNotRegisteredDialog(String email) {
+// Dialog untuk memperbaiki Google Play Services
+void _showGooglePlayServicesFixDialog() {
+  showDialog(
+    context: context,
+    barrierDismissible: false,
+    builder: (context) => AlertDialog(
+      title: Row(
+        children: [
+          Icon(Icons.build, color: Colors.blue),
+          SizedBox(width: 10),
+          Text('Perbaikan Diperlukan'),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text('HP Anda membutuhkan:'),
+          SizedBox(height: 10),
+          _buildStepItem('1. Buka "Google Play Store"'),
+          _buildStepItem('2. Cari "Google Play Services"'),
+          _buildStepItem('3. Update ke versi terbaru'),
+          _buildStepItem('4. Restart HP setelah update'),
+          SizedBox(height: 15),
+          Text(
+            'Jika tidak menemukan di Play Store, HP Anda mungkin tidak support Google Services.',
+            style: TextStyle(fontSize: 12, color: Colors.grey),
+          ),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.pop(context),
+          child: Text('Nanti'),
+        ),
+        ElevatedButton(
+          onPressed: () {
+            Navigator.pop(context);
+            _openPlayStoreForGoogleServices();
+          },
+          child: Text('Buka Play Store'),
+        ),
+      ],
+    ),
+  );
+}
+
+Widget _buildStepItem(String text) {
+  return Padding(
+    padding: const EdgeInsets.symmetric(vertical: 4),
+    child: Row(
+      children: [
+        Icon(Icons.check_circle, size: 16, color: Colors.green),
+        SizedBox(width: 8),
+        Text(text),
+      ],
+    ),
+  );
+}
+
+// Buka Google Play Services di Play Store
+Future<void> _openPlayStoreForGoogleServices() async {
+  const playStoreUrl = 'market://details?id=com.google.android.gms';
+  const webUrl = 'https://play.google.com/store/apps/details?id=com.google.android.gms';
+  
+  try {
+    if (await canLaunch(playStoreUrl)) {
+      await launch(playStoreUrl);
+    } else if (await canLaunch(webUrl)) {
+      await launch(webUrl);
+    } else {
+      _showError('Tidak dapat membuka Play Store');
+    }
+  } catch (e) {
+    _showError('Gagal membuka Play Store: $e');
+  }
+}
+
+  // Method baru: Dialog untuk user belum terdaftar via Google
+  void _showGoogleUserNotRegisteredDialog() {
     showDialog(
       context: context,
-      builder: (BuildContext context) => _buildRegisterDialog(email),
+      builder: (BuildContext context) => _buildGoogleRegisterDialog(),
     );
   }
 
-  Widget _buildErrorDialog({
-    required IconData icon,
-    required Color iconColor,
-    required Color backgroundColor,
-    required String title,
-    required String message,
-    required String primaryButtonText,
-    required VoidCallback primaryButtonAction,
-  }) {
+  Widget _buildGoogleRegisterDialog() {
     return Dialog(
       shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
       child: Container(
@@ -247,14 +390,14 @@ class _LoginScreenState extends State<LoginScreen>
               width: 80,
               height: 80,
               decoration: BoxDecoration(
-                color: backgroundColor,
+                color: Colors.orange.shade50,
                 shape: BoxShape.circle,
               ),
-              child: Icon(icon, color: iconColor, size: 40),
+              child: Icon(Icons.person_add, color: Colors.orange, size: 40),
             ),
             const SizedBox(height: 20),
             Text(
-              title,
+              'Akun Google Belum Terdaftar',
               style: TextStyle(
                 fontSize: 20,
                 fontWeight: FontWeight.bold,
@@ -263,7 +406,8 @@ class _LoginScreenState extends State<LoginScreen>
             ),
             const SizedBox(height: 12),
             Text(
-              message,
+              'Akun Google Anda belum terdaftar di sistem WargaKita. '
+              'Silakan daftar terlebih dahulu menggunakan email ini.',
               style: TextStyle(
                 fontSize: 15,
                 color: Colors.grey.shade600,
@@ -271,20 +415,29 @@ class _LoginScreenState extends State<LoginScreen>
               ),
               textAlign: TextAlign.center,
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 28),
             Row(
               children: [
                 Expanded(
                   child: _buildOutlinedButton(
-                    text: 'Tutup',
+                    text: 'Batal',
                     onPressed: () => Navigator.of(context).pop(),
                   ),
                 ),
                 const SizedBox(width: 12),
                 Expanded(
                   child: _buildElevatedButton(
-                    text: primaryButtonText,
-                    onPressed: primaryButtonAction,
+                    text: 'Daftar Sekarang',
+                    onPressed: () {
+                      Navigator.of(context).pop();
+                      // Arahkan ke Register Screen
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => RegisterScreen(),
+                        ),
+                      );
+                    },
                   ),
                 ),
               ],
@@ -294,6 +447,15 @@ class _LoginScreenState extends State<LoginScreen>
       ),
     );
   }
+
+
+  void _showEmailNotRegisteredDialog(String email) {
+    showDialog(
+      context: context,
+      builder: (BuildContext context) => _buildRegisterDialog(email),
+    );
+  }
+
 
   Widget _buildRegisterDialog(String email) {
     return Dialog(
@@ -435,29 +597,6 @@ class _LoginScreenState extends State<LoginScreen>
         transitionDuration: _transitionDuration,
       ),
     );
-  }
-
-  void _showGoogleSignInError(dynamic error) {
-    String errorMessage;
-
-    if (error.toString().contains('sign_in_failed')) {
-      errorMessage =
-          'Google Sign-In gagal. Pastikan Google Play Services terinstall.';
-    } else if (error.toString().contains('network_error')) {
-      errorMessage = 'Koneksi internet bermasalah. Periksa koneksi Anda.';
-    } else if (error.toString().contains('INVALID_ACCOUNT')) {
-      errorMessage = 'Akun Google tidak valid.';
-    } else if (error.toString().contains('dibatalkan')) {
-      return;
-    } else if (error.toString().contains('Email tidak ditemukan')) {
-      errorMessage =
-          'Akun Google belum terdaftar. Silakan daftar terlebih dahulu.';
-    } else {
-      errorMessage =
-          'Gagal login dengan Google: ${error.toString().replaceAll('Exception: ', '')}';
-    }
-
-    _showError(errorMessage);
   }
 
   void _saveAuthData(AuthResponse result) {

@@ -10,7 +10,6 @@ import '../services/profile_service.dart';
 import '../services/auth_service.dart';
 import '../widget/flutter_pdfview.dart';
 
-
 class ProfileScreen extends StatefulWidget {
   final User user;
 
@@ -130,7 +129,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
       );
 
       if (pickedFile != null) {
-
         final file = File(pickedFile.path);
 
         // Validasi ukuran file (max 5MB)
@@ -203,9 +201,208 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
       _showErrorSnackbar(errorMessage);
     } finally {
-      if (mounted) {
-      }
+      if (mounted) {}
     }
+  }
+
+  Future<String?> _showDeliveryMethodDialog(BuildContext context) async {
+    return await showDialog<String>(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Pilih Metode Pengiriman'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            ListTile(
+              leading: Icon(Icons.email, color: Colors.blue.shade600),
+              title: const Text('Kirim via Email'),
+              subtitle: const Text('Aplikasi email akan terbuka'),
+              onTap: () => Navigator.pop(context, 'email'),
+            ),
+            ListTile(
+              leading: Icon(Icons.chat, color: Colors.green.shade600),
+              title: const Text('Kirim via WhatsApp'),
+              subtitle: const Text('Aplikasi WhatsApp akan terbuka'),
+              onTap: () => Navigator.pop(context, 'whatsapp'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Batal'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _sendReportViaEmail({
+    required String category,
+    required String description,
+    String? imagePath,
+  }) async {
+    try {
+      final userName = _currentUser.namaLengkap ?? 'Pengguna Warga App';
+      final userEmail = _currentUser.email;
+      final userPhone = _currentUser.nomorTelepon ?? 'Tidak tersedia';
+
+      final subject = '🐛 [BUG REPORT] $category - ${DateTime.now().toLocal()}';
+
+      final body =
+          '''
+🚨 **LAPORAN BUG/MASALAH APLIKASI Warga App**
+──────────────────────────────────────────────────
+
+**📋 INFORMASI PELAPOR**
+• Nama: $userName
+• Email: $userEmail
+• No. Telepon: $userPhone
+
+**📊 KATEGORI MASALAH**
+$category
+
+**📝 DESKRIPSI MASALAH**
+$description
+
+**🛠️ INFORMASI TEKNIS**
+• Aplikasi: Warga App v1.0.0
+• Platform: ${Platform.operatingSystem}
+• Tanggal: ${DateTime.now().toLocal()}
+• Status Akun: ${_currentUser.email.isNotEmpty ? 'Terdaftar' : 'Belum Verifikasi'}
+
+**📱 DATA TAMBAHAN**
+• Foto Profil: ${_currentUser.fotoProfil != null ? 'Ya' : 'Tidak'}
+• Status KK: ${_kkStatus?['kkVerificationStatus'] ?? 'Belum Upload'}
+• Alamat: ${_currentUser.alamat ?? 'Tidak tersedia'}
+• RT/RW: ${_currentUser.rtRw ?? 'Tidak tersedia'}
+
+──────────────────────────────────────────────────
+⚠️ **CATATAN**
+Laporan ini dibuat otomatis dari aplikasi Warga App.
+Jika ada pertanyaan lebih lanjut, hubungi pelapor di:
+📧 $userEmail
+📱 $userPhone
+──────────────────────────────────────────────────
+''';
+
+      final mailtoUri =
+          'mailto:developer@wargaapp.com?'
+          'subject=${Uri.encodeComponent(subject)}&'
+          'body=${Uri.encodeComponent(body)}';
+
+      if (await canLaunchUrl(Uri.parse(mailtoUri))) {
+        await launchUrl(Uri.parse(mailtoUri));
+        _showSuccessSnackbar('Membuka aplikasi email...');
+      } else {
+        // Fallback: tampilkan data untuk di-copy manual
+        await _showManualCopyDialog(
+          title: 'Data Laporan Bug',
+          data: body,
+          recipient: 'developer@wargaapp.com',
+        );
+      }
+    } catch (e) {
+      print('❌ Error sending email report: $e');
+      _showErrorSnackbar('Gagal membuka aplikasi email');
+    }
+  }
+
+  Future<void> _sendReportViaWhatsApp({
+    required String category,
+    required String description,
+  }) async {
+    try {
+      final userName = _currentUser.namaLengkap ?? 'Pengguna Warga App';
+      final userPhone = _currentUser.nomorTelepon ?? 'Tidak tersedia';
+
+      // Nomor WhatsApp penerima (bisa disesuaikan)
+      final whatsappNumber = '+6281234567890'; // Ganti dengan nomor support
+
+      final message =
+          '''
+*🐛 LAPORAN BUG APLIKASI Warga App*
+
+*📋 Informasi Pelapor:*
+• Nama: $userName
+• No. Telepon: $userPhone
+
+*📊 Kategori Masalah:*
+$category
+
+*📝 Deskripsi Masalah:*
+$description
+
+*🛠️ Informasi Teknis:*
+• Aplikasi: Warga App v1.0.0
+• Platform: ${Platform.operatingSystem}
+• Tanggal: ${DateTime.now().toLocal()}
+
+*────────────────────────────*
+Laporan ini dibuat otomatis dari aplikasi.
+Mohon ditindaklanjuti.
+''';
+
+      final encodedMessage = Uri.encodeComponent(message);
+      final whatsappUrl = 'https://wa.me/$whatsappNumber?text=$encodedMessage';
+
+      if (await canLaunchUrl(Uri.parse(whatsappUrl))) {
+        await launchUrl(Uri.parse(whatsappUrl));
+      } else {
+        _showErrorSnackbar('Tidak dapat membuka WhatsApp');
+        await _showManualCopyDialog(
+          title: 'Pesan WhatsApp',
+          data: message,
+          recipient: whatsappNumber,
+        );
+      }
+    } catch (e) {
+      print('❌ Error sending WhatsApp report: $e');
+      _showErrorSnackbar('Gagal membuka WhatsApp');
+    }
+  }
+
+  Future<void> _showManualCopyDialog({
+    required String title,
+    required String data,
+    required String recipient,
+  }) async {
+    return showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Text(title),
+        content: Container(
+          width: double.infinity,
+          padding: const EdgeInsets.all(16),
+          decoration: BoxDecoration(
+            color: Colors.grey.shade50,
+            borderRadius: BorderRadius.circular(12),
+            border: Border.all(color: Colors.grey.shade200),
+          ),
+          child: SelectableText(
+            data,
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade800),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Tutup'),
+          ),
+          ElevatedButton.icon(
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: data));
+              _showSuccessSnackbar('Data disalin! Kirim ke: $recipient');
+              Navigator.pop(context);
+            },
+            icon: const Icon(Icons.copy, size: 18),
+            label: const Text('Salin'),
+          ),
+        ],
+      ),
+    );
   }
 
   @override
@@ -213,16 +410,18 @@ class _ProfileScreenState extends State<ProfileScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       body: SafeArea(
-        child: Column(
-          children: [
-            // Header dengan tombol back
-            _buildHeader(),
+        child: SingleChildScrollView(
+          // GANTI Column dengan SingleChildScrollView
+          child: Column(
+            mainAxisSize: MainAxisSize.min, // TAMBAHKAN INI
+            children: [
+              // Header dengan tombol back
+              _buildHeader(),
 
-            Expanded(
-              child: Padding(
+              Padding(
                 padding: const EdgeInsets.all(20),
-                child: ListView(
-                  physics: const BouncingScrollPhysics(),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min, // TAMBAHKAN INI
                   children: [
                     // Info KK Verification jika ada
                     if (_kkStatus != null) _buildKKVerificationCard(),
@@ -377,13 +576,12 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   ],
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
   }
-
 
   // Helper untuk cek kelengkapan profil
   int _getProfileCompletionPercentage() {
@@ -885,7 +1083,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
     }
 
     try {
-
       // Ambil URL dokumen KK dari server
       final kkData = await ProfileService.getKKDocument();
 
@@ -1301,8 +1498,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
       print('❌ Error viewing KK document: $e');
       _showErrorSnackbar('Gagal memuat dokumen KK: ${e.toString()}');
     } finally {
-      if (mounted) {
-      }
+      if (mounted) {}
     }
   }
 
@@ -1768,17 +1964,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
 
   Widget _buildPersonalInfoSection() {
     // Cek apakah data personal sudah lengkap
-    final hasPersonalInfo =
-        (_currentUser.nik?.isNotEmpty ?? false) ||
-        (_currentUser.tanggalLahir != null) ||
-        (_currentUser.tempatLahir?.isNotEmpty ?? false) ||
-        (_currentUser.nomorTelepon?.isNotEmpty ?? false) ||
-        (_currentUser.alamat?.isNotEmpty ?? false) ||
-        (_currentUser.kota?.isNotEmpty ?? false) ||
-        (_currentUser.rtRw?.isNotEmpty ?? false) ||
-        (_currentUser.kodePos?.isNotEmpty ?? false);
 
-        final hasAnyData =
+    final hasAnyData =
         (_currentUser.nik?.isNotEmpty == true) ||
         (_currentUser.nomorTelepon?.isNotEmpty == true) ||
         (_currentUser.alamat?.isNotEmpty == true) ||
@@ -1788,8 +1975,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
         (_currentUser.tempatLahir?.isNotEmpty == true) ||
         (_currentUser.tanggalLahir != null);
 
-
-        if (!hasAnyData) {
+    if (!hasAnyData) {
       // Tampilkan placeholder jika belum ada data
       return Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -1805,32 +1991,39 @@ class _ProfileScreenState extends State<ProfileScreen> {
               ),
             ),
           ),
-          Card(
-            elevation: 3,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(16),
-            ),
-            child: Container(
-              padding: const EdgeInsets.all(20),
-              child: Column(
-                children: [
-                  Icon(
-                    Icons.info_outline,
-                    color: Colors.grey.shade400,
-                    size: 40,
-                  ),
-                  const SizedBox(height: 12),
-                  const Text(
-                    'Belum ada informasi personal',
-                    style: TextStyle(fontSize: 14, color: Colors.grey),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Klik "Edit Profil" untuk melengkapi data',
-                    style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
-                    textAlign: TextAlign.center,
-                  ),
-                ],
+          Container(
+            width: double.infinity, // TAMBAHKAN INI
+            child: Card(
+              elevation: 3,
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(16),
+              ),
+              child: Container(
+                padding: const EdgeInsets.all(20),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min, // PERBAIKAN: MainAxisSize.min
+                  children: [
+                    Icon(
+                      Icons.info_outline,
+                      color: Colors.grey.shade400,
+                      size: 40,
+                    ),
+                    const SizedBox(height: 12),
+                    const Text(
+                      'Belum ada informasi personal',
+                      style: TextStyle(fontSize: 14, color: Colors.grey),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      'Klik "Edit Profil" untuk melengkapi data',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Colors.grey.shade500,
+                      ),
+                      textAlign: TextAlign.center,
+                    ),
+                  ],
+                ),
               ),
             ),
           ),
@@ -1859,42 +2052,17 @@ class _ProfileScreenState extends State<ProfileScreen> {
     // Kode asal untuk menampilkan data jika ada
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min, // PERBAIKAN: MainAxisSize.min
       children: [
         Padding(
           padding: const EdgeInsets.only(left: 8, bottom: 8),
-          child: Row(
-            children: [
-              Text(
-                'Informasi Personal',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.blue.shade800,
-                ),
-              ),
-              if (!hasPersonalInfo) ...[
-                const SizedBox(width: 8),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 8,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.orange.shade50,
-                    borderRadius: BorderRadius.circular(4),
-                    border: Border.all(color: Colors.orange.shade200),
-                  ),
-                  child: Text(
-                    'Belum lengkap',
-                    style: TextStyle(
-                      color: Colors.orange.shade700,
-                      fontSize: 10,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-                ),
-              ],
-            ],
+          child: Text(
+            'Informasi Personal',
+            style: TextStyle(
+              fontSize: 16,
+              fontWeight: FontWeight.w600,
+              color: Colors.blue.shade800,
+            ),
           ),
         ),
         Card(
@@ -1903,75 +2071,30 @@ class _ProfileScreenState extends State<ProfileScreen> {
             borderRadius: BorderRadius.circular(16),
           ),
           child: Column(
+            mainAxisSize: MainAxisSize.min, // PERBAIKAN: MainAxisSize.min
             children: [
-              _buildInfoRow('NIK', _currentUser.nik ?? 'Belum diisi'),
-              _buildInfoRow(
-                'Tanggal Lahir',
-                _currentUser.tanggalLahir != null
-                    ? _formatDate(_currentUser.tanggalLahir)
-                    : 'Belum diisi',
-              ),
-              _buildInfoRow(
-                'Tempat Lahir',
-                _currentUser.tempatLahir?.isNotEmpty == true
-                    ? _currentUser.tempatLahir!
-                    : 'Belum diisi',
-              ),
-              _buildInfoRow(
-                'Nomor Telepon',
-                _currentUser.nomorTelepon?.isNotEmpty == true
-                    ? _currentUser.nomorTelepon!
-                    : 'Belum diisi',
-              ),
-              _buildInfoRow(
-                'Alamat',
-                _currentUser.alamat?.isNotEmpty == true
-                    ? _currentUser.alamat!
-                    : 'Belum diisi',
-              ),
-              _buildInfoRow(
-                'RT/RW',
-                _currentUser.rtRw?.isNotEmpty == true
-                    ? _currentUser.rtRw!
-                    : 'Belum diisi',
-              ),
-              _buildInfoRow(
-                'Kota',
-                _currentUser.kota?.isNotEmpty == true
-                    ? _currentUser.kota!
-                    : 'Belum diisi',
-              ),
-              _buildInfoRow(
-                'Kode Pos',
-                _currentUser.kodePos?.isNotEmpty == true
-                    ? _currentUser.kodePos!
-                    : 'Belum diisi',
-              ),
+              if (_currentUser.nik?.isNotEmpty == true)
+                _buildInfoRow('NIK', _currentUser.nik!),
+              if (_currentUser.tanggalLahir != null)
+                _buildInfoRow(
+                  'Tanggal Lahir',
+                  _formatDate(_currentUser.tanggalLahir!),
+                ),
+              if (_currentUser.tempatLahir?.isNotEmpty == true)
+                _buildInfoRow('Tempat Lahir', _currentUser.tempatLahir!),
+              if (_currentUser.nomorTelepon?.isNotEmpty == true)
+                _buildInfoRow('Nomor Telepon', _currentUser.nomorTelepon!),
+              if (_currentUser.alamat?.isNotEmpty == true)
+                _buildInfoRow('Alamat', _currentUser.alamat!),
+              if (_currentUser.rtRw?.isNotEmpty == true)
+                _buildInfoRow('RT/RW', _currentUser.rtRw!),
+              if (_currentUser.kota?.isNotEmpty == true)
+                _buildInfoRow('Kota', _currentUser.kota!),
+              if (_currentUser.kodePos?.isNotEmpty == true)
+                _buildInfoRow('Kode Pos', _currentUser.kodePos!),
             ],
           ),
         ),
-
-        // Tombol edit jika data belum lengkap
-        if (!hasPersonalInfo) ...[
-          const SizedBox(height: 12),
-          SizedBox(
-            width: double.infinity,
-            child: ElevatedButton.icon(
-              onPressed: () => _showEditProfileDialog(context),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.orange.shade50,
-                foregroundColor: Colors.orange.shade700,
-                elevation: 0,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
-                  side: BorderSide(color: Colors.orange.shade200),
-                ),
-              ),
-              icon: Icon(Icons.edit, size: 16),
-              label: const Text('Lengkapi Informasi Personal'),
-            ),
-          ),
-        ],
       ],
     );
   }
@@ -1980,6 +2103,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     final isEmpty = value.isEmpty || value == 'Belum diisi';
 
     return Column(
+      mainAxisSize: MainAxisSize.min, // TAMBAHKAN INI
       children: [
         ListTile(
           title: Text(
@@ -2023,6 +2147,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Widget _buildMenuSection(String title, List<Widget> children) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
+      mainAxisSize: MainAxisSize.min, // TAMBAHKAN INI
       children: [
         Padding(
           padding: const EdgeInsets.only(left: 8, bottom: 8),
@@ -2041,7 +2166,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
           shape: RoundedRectangleBorder(
             borderRadius: BorderRadius.circular(16),
           ),
-          child: Column(children: children),
+          child: Column(
+            mainAxisSize: MainAxisSize.min, // TAMBAHKAN INI
+            children: children,
+          ),
         ),
       ],
     );
@@ -3002,465 +3130,460 @@ class _ProfileScreenState extends State<ProfileScreen> {
   }
 
   void _showHelpSupport(BuildContext context) {
-  showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (context) {
-      return Container(
-        height: MediaQuery.of(context).size.height * 0.9,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(24),
-            topRight: Radius.circular(24),
-          ),
-        ),
-        child: Column(
-          children: [
-            // Header
-            Container(
-              padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 24),
-              decoration: BoxDecoration(
-                color: Colors.blue.shade700,
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(24),
-                  topRight: Radius.circular(24),
-                ),
-              ),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      const Text(
-                        'Bantuan & Dukungan',
-                        style: TextStyle(
-                          fontSize: 24,
-                          fontWeight: FontWeight.bold,
-                          color: Colors.white,
-                        ),
-                      ),
-                      IconButton(
-                        icon: Container(
-                          padding: const EdgeInsets.all(8),
-                          decoration: BoxDecoration(
-                            color: Colors.white.withOpacity(0.2),
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.close,
-                            color: Colors.white,
-                            size: 20,
-                          ),
-                        ),
-                        onPressed: () => Navigator.pop(context),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 8),
-                  const Text(
-                    'Dapatkan bantuan untuk menggunakan aplikasi Warga',
-                    style: TextStyle(
-                      color: Colors.white70,
-                      fontSize: 14,
-                    ),
-                  ),
-                ],
-              ),
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          height: MediaQuery.of(context).size.height * 0.9,
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(24),
+              topRight: Radius.circular(24),
             ),
-
-            // Content
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
+          ),
+          child: Column(
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  horizontal: 24,
+                  vertical: 24,
+                ),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade700,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(24),
+                    topRight: Radius.circular(24),
+                  ),
+                ),
                 child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    // Quick Access Cards
-                    const Text(
-                      'Akses Cepat',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
-                    ),
-                    const SizedBox(height: 16),
-
                     Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        Expanded(
-                          child: _buildQuickActionCard(
-                            Icons.phone_in_talk,
-                            'Telepon',
-                            'Hubungi customer service',
-                            Colors.green.shade50,
-                            Colors.green.shade600,
-                            () => _makePhoneCall("+623417890123"),
+                        const Text(
+                          'Bantuan & Dukungan',
+                          style: TextStyle(
+                            fontSize: 24,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
                           ),
                         ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: _buildQuickActionCard(
-                            Icons.chat_bubble,
-                            'Chat',
-                            'Bantuan instan via chat',
-                            Colors.blue.shade50,
-                            Colors.blue.shade600,
-                            () => _startLiveChat(context),
+                        IconButton(
+                          icon: Container(
+                            padding: const EdgeInsets.all(8),
+                            decoration: BoxDecoration(
+                              color: Colors.white.withOpacity(0.2),
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.close,
+                              color: Colors.white,
+                              size: 20,
+                            ),
                           ),
+                          onPressed: () => Navigator.pop(context),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 12),
-
-                    // Bantuan Sections
-                    const SizedBox(height: 24),
+                    const SizedBox(height: 8),
                     const Text(
-                      'Bantuan Berdasarkan Kategori',
-                      style: TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.bold,
-                        color: Colors.black87,
-                      ),
+                      'Dapatkan bantuan untuk menggunakan aplikasi Warga',
+                      style: TextStyle(color: Colors.white70, fontSize: 14),
                     ),
-                    const SizedBox(height: 16),
-
-                    _buildHelpCategory(
-                      'Akun & Profil',
-                      [
-                        'Cara mengedit profil',
-                        'Cara upload dokumen KK',
-                        'Cara reset password',
-                        'Cara verifikasi email',
-                        'Masalah login',
-                      ],
-                      Icons.person,
-                      Colors.blue.shade600,
-                      () => _showAccountHelp(context),
-                    ),
-                    const SizedBox(height: 16),
-
-                    _buildHelpCategory(
-                      'Dokumen & Verifikasi',
-                      [
-                        'Persyaratan upload KK',
-                        'Status verifikasi dokumen',
-                        'Dokumen ditolak',
-                        'Cara upload ulang',
-                        'Masa berlaku verifikasi',
-                      ],
-                      Icons.description,
-                      Colors.green.shade600,
-                      () => _showDocumentHelp(context),
-                    ),
-                    const SizedBox(height: 16),
-
-                    _buildHelpCategory(
-                      'Aplikasi & Teknis',
-                      [
-                        'Aplikasi crash/error',
-                        'Notifikasi tidak muncul',
-                        'Update aplikasi',
-                        'Masalah internet',
-                        'Keluhan performa',
-                      ],
-                      Icons.smartphone,
-                      Colors.orange.shade600,
-                      () => _showTechnicalHelp(context),
-                    ),
-                    const SizedBox(height: 16),
-
-                    _buildHelpCategory(
-                      'Keamanan & Privasi',
-                      [
-                        'Keamanan akun',
-                        'Laporan aktivitas mencurigakan',
-                        'Reset password',
-                        'Data pribadi',
-                        'Hapus akun',
-                      ],
-                      Icons.security,
-                      Colors.purple.shade600,
-                      () => _showSecurityHelp(context),
-                    ),
-
-                    // FAQ Section
-                    const SizedBox(height: 32),
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: Colors.blue.shade50,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.blue.shade100),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Row(
-                            children: [
-                              Icon(
-                                Icons.question_answer,
-                                color: Colors.blue.shade700,
-                                size: 24,
-                              ),
-                              const SizedBox(width: 12),
-                              const Text(
-                                'Pertanyaan Umum (FAQ)',
-                                style: TextStyle(
-                                  fontSize: 18,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.black87,
-                                ),
-                              ),
-                            ],
-                          ),
-                          const SizedBox(height: 12),
-                          _buildFAQItem(
-                            'Bagaimana cara verifikasi akun?',
-                            'Verifikasi dilakukan melalui upload dokumen KK. Dokumen akan diverifikasi oleh admin dalam 1-3 hari kerja.',
-                          ),
-                          _buildFAQItem(
-                            'Berapa lama proses verifikasi KK?',
-                            'Proses verifikasi biasanya memakan waktu 1-3 hari kerja. Anda akan mendapat notifikasi saat status berubah.',
-                          ),
-                          _buildFAQItem(
-                            'Apa yang harus dilakukan jika dokumen ditolak?',
-                            'Periksa alasan penolakan di profil > status KK. Upload ulang dengan dokumen yang lebih jelas dan sesuai persyaratan.',
-                          ),
-                          const SizedBox(height: 12),
-                          Align(
-                            alignment: Alignment.centerRight,
-                            child: TextButton(
-                              onPressed: () => _showFullFAQ(context),
-                              child: Text(
-                                'Lihat FAQ Lengkap →',
-                                style: TextStyle(
-                                  color: Colors.blue.shade700,
-                                  fontWeight: FontWeight.w500,
-                                ),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    // Contact Information
-                    const SizedBox(height: 32),
-                    Container(
-                      padding: const EdgeInsets.all(20),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.shade50,
-                        borderRadius: BorderRadius.circular(16),
-                        border: Border.all(color: Colors.grey.shade200),
-                      ),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          const Text(
-                            '📞 Kontak Resmi',
-                            style: TextStyle(
-                              fontSize: 18,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.black87,
-                            ),
-                          ),
-                          const SizedBox(height: 12),
-                          _buildContactInfoRow(
-                            Icons.phone,
-                            'Customer Service',
-                            '(0341) 789-0123',
-                            Colors.green.shade700,
-                          ),
-                          _buildContactInfoRow(
-                            Icons.email,
-                            'Email Support',
-                            'support@wargaapp.com',
-                            Colors.blue.shade700,
-                          ),
-                          _buildContactInfoRow(
-                            Icons.chat_bubble,
-                            'WhatsApp',
-                            '+62 812-3456-7890',
-                            Colors.green.shade700,
-                          ),
-                          _buildContactInfoRow(
-                            Icons.location_on,
-                            'Alamat Kantor',
-                            'Jl. Danau Ranau II, Malang',
-                            Colors.orange.shade700,
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    // Operating Hours
-                    const SizedBox(height: 16),
-                    Container(
-                      padding: const EdgeInsets.all(16),
-                      decoration: BoxDecoration(
-                        color: Colors.amber.shade50,
-                        borderRadius: BorderRadius.circular(12),
-                        border: Border.all(color: Colors.amber.shade200),
-                      ),
-                      child: Row(
-                        children: [
-                          Icon(
-                            Icons.access_time,
-                            color: Colors.amber.shade700,
-                            size: 20,
-                          ),
-                          const SizedBox(width: 12),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(
-                                  '🕐 Jam Operasional',
-                                  style: TextStyle(
-                                    color: Colors.amber.shade800,
-                                    fontWeight: FontWeight.w600,
-                                  ),
-                                ),
-                                const SizedBox(height: 4),
-                                const Text(
-                                  'Senin - Jumat: 08.00 - 17.00 WIB\nSabtu: 08.00 - 12.00 WIB',
-                                  style: TextStyle(fontSize: 12),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-
-                    // Report Problem Button
-                    const SizedBox(height: 32),
-                    ElevatedButton.icon(
-                      onPressed: () => _showReportProblemDialog(context),
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red.shade50,
-                        foregroundColor: Colors.red.shade700,
-                        minimumSize: const Size(double.infinity, 56),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          side: BorderSide(color: Colors.red.shade200),
-                        ),
-                      ),
-                      icon: const Icon(Icons.bug_report),
-                      label: const Text(
-                        'Laporkan Masalah atau Bug',
-                        style: TextStyle(fontWeight: FontWeight.w600),
-                      ),
-                    ),
-
-                    const SizedBox(height: 40),
                   ],
                 ),
               ),
+
+              // Content
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    children: [
+                      // Quick Access Cards
+                      const Text(
+                        'Akses Cepat',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      Row(
+                        children: [
+                          Expanded(
+                            child: _buildQuickActionCard(
+                              Icons.phone_in_talk,
+                              'Telepon',
+                              'Hubungi customer service',
+                              Colors.green.shade50,
+                              Colors.green.shade600,
+                              () => _makePhoneCall("+623417890123"),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: _buildQuickActionCard(
+                              Icons.chat_bubble,
+                              'Chat',
+                              'Bantuan instan via chat',
+                              Colors.blue.shade50,
+                              Colors.blue.shade600,
+                              () => _startLiveChat(context),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+
+                      // Bantuan Sections
+                      const SizedBox(height: 24),
+                      const Text(
+                        'Bantuan Berdasarkan Kategori',
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      _buildHelpCategory(
+                        'Akun & Profil',
+                        [
+                          'Cara mengedit profil',
+                          'Cara upload dokumen KK',
+                          'Cara reset password',
+                          'Cara verifikasi email',
+                          'Masalah login',
+                        ],
+                        Icons.person,
+                        Colors.blue.shade600,
+                        () => _showAccountHelp(context),
+                      ),
+                      const SizedBox(height: 16),
+
+                      _buildHelpCategory(
+                        'Dokumen & Verifikasi',
+                        [
+                          'Persyaratan upload KK',
+                          'Status verifikasi dokumen',
+                          'Dokumen ditolak',
+                          'Cara upload ulang',
+                          'Masa berlaku verifikasi',
+                        ],
+                        Icons.description,
+                        Colors.green.shade600,
+                        () => _showDocumentHelp(context),
+                      ),
+                      const SizedBox(height: 16),
+
+                      _buildHelpCategory(
+                        'Aplikasi & Teknis',
+                        [
+                          'Aplikasi crash/error',
+                          'Notifikasi tidak muncul',
+                          'Update aplikasi',
+                          'Masalah internet',
+                          'Keluhan performa',
+                        ],
+                        Icons.smartphone,
+                        Colors.orange.shade600,
+                        () => _showTechnicalHelp(context),
+                      ),
+                      const SizedBox(height: 16),
+
+                      _buildHelpCategory(
+                        'Keamanan & Privasi',
+                        [
+                          'Keamanan akun',
+                          'Laporan aktivitas mencurigakan',
+                          'Reset password',
+                          'Data pribadi',
+                          'Hapus akun',
+                        ],
+                        Icons.security,
+                        Colors.purple.shade600,
+                        () => _showSecurityHelp(context),
+                      ),
+
+                      // FAQ Section
+                      const SizedBox(height: 32),
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: Colors.blue.shade50,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.blue.shade100),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Row(
+                              children: [
+                                Icon(
+                                  Icons.question_answer,
+                                  color: Colors.blue.shade700,
+                                  size: 24,
+                                ),
+                                const SizedBox(width: 12),
+                                const Text(
+                                  'Pertanyaan Umum (FAQ)',
+                                  style: TextStyle(
+                                    fontSize: 18,
+                                    fontWeight: FontWeight.bold,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 12),
+                            _buildFAQItem(
+                              'Bagaimana cara verifikasi akun?',
+                              'Verifikasi dilakukan melalui upload dokumen KK. Dokumen akan diverifikasi oleh admin dalam 1-3 hari kerja.',
+                            ),
+                            _buildFAQItem(
+                              'Berapa lama proses verifikasi KK?',
+                              'Proses verifikasi biasanya memakan waktu 1-3 hari kerja. Anda akan mendapat notifikasi saat status berubah.',
+                            ),
+                            _buildFAQItem(
+                              'Apa yang harus dilakukan jika dokumen ditolak?',
+                              'Periksa alasan penolakan di profil > status KK. Upload ulang dengan dokumen yang lebih jelas dan sesuai persyaratan.',
+                            ),
+                            const SizedBox(height: 12),
+                            Align(
+                              alignment: Alignment.centerRight,
+                              child: TextButton(
+                                onPressed: () => _showFullFAQ(context),
+                                child: Text(
+                                  'Lihat FAQ Lengkap →',
+                                  style: TextStyle(
+                                    color: Colors.blue.shade700,
+                                    fontWeight: FontWeight.w500,
+                                  ),
+                                ),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // Contact Information
+                      const SizedBox(height: 32),
+                      Container(
+                        padding: const EdgeInsets.all(20),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(16),
+                          border: Border.all(color: Colors.grey.shade200),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const Text(
+                              '📞 Kontak Resmi',
+                              style: TextStyle(
+                                fontSize: 18,
+                                fontWeight: FontWeight.bold,
+                                color: Colors.black87,
+                              ),
+                            ),
+                            const SizedBox(height: 12),
+                            _buildContactInfoRow(
+                              Icons.phone,
+                              'Customer Service',
+                              '(0341) 789-0123',
+                              Colors.green.shade700,
+                            ),
+                            _buildContactInfoRow(
+                              Icons.email,
+                              'Email Support',
+                              'support@wargaapp.com',
+                              Colors.blue.shade700,
+                            ),
+                            _buildContactInfoRow(
+                              Icons.chat_bubble,
+                              'WhatsApp',
+                              '+62 812-3456-7890',
+                              Colors.green.shade700,
+                            ),
+                            _buildContactInfoRow(
+                              Icons.location_on,
+                              'Alamat Kantor',
+                              'Jl. Danau Ranau II, Malang',
+                              Colors.orange.shade700,
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // Operating Hours
+                      const SizedBox(height: 16),
+                      Container(
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.amber.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.amber.shade200),
+                        ),
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.access_time,
+                              color: Colors.amber.shade700,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 12),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    '🕐 Jam Operasional',
+                                    style: TextStyle(
+                                      color: Colors.amber.shade800,
+                                      fontWeight: FontWeight.w600,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  const Text(
+                                    'Senin - Jumat: 08.00 - 17.00 WIB\nSabtu: 08.00 - 12.00 WIB',
+                                    style: TextStyle(fontSize: 12),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      // Report Problem Button
+                      const SizedBox(height: 32),
+                      ElevatedButton.icon(
+                        onPressed: () => _showReportProblemDialog(context),
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red.shade50,
+                          foregroundColor: Colors.red.shade700,
+                          minimumSize: const Size(double.infinity, 56),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                            side: BorderSide(color: Colors.red.shade200),
+                          ),
+                        ),
+                        icon: const Icon(Icons.bug_report),
+                        label: const Text(
+                          'Laporkan Masalah atau Bug',
+                          style: TextStyle(fontWeight: FontWeight.w600),
+                        ),
+                      ),
+
+                      const SizedBox(height: 40),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  // Helper Methods untuk Bantuan & Dukungan
+
+  Widget _buildQuickActionCard(
+    IconData icon,
+    String title,
+    String subtitle,
+    Color bgColor,
+    Color iconColor,
+    VoidCallback onTap,
+  ) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: bgColor,
+          borderRadius: BorderRadius.circular(16),
+          border: Border.all(color: bgColor.withOpacity(0.3)),
+        ),
+        child: Column(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: iconColor.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(icon, color: iconColor, size: 24),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              title,
+              style: TextStyle(
+                fontSize: 14,
+                fontWeight: FontWeight.w600,
+                color: Colors.grey.shade800,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              subtitle,
+              textAlign: TextAlign.center,
+              style: TextStyle(fontSize: 11, color: Colors.grey.shade600),
             ),
           ],
         ),
-      );
-    },
-  );
-}
+      ),
+    );
+  }
 
-// Helper Methods untuk Bantuan & Dukungan
-
-Widget _buildQuickActionCard(
-  IconData icon,
-  String title,
-  String subtitle,
-  Color bgColor,
-  Color iconColor,
-  VoidCallback onTap,
-) {
-  return GestureDetector(
-    onTap: onTap,
-    child: Container(
-      padding: const EdgeInsets.all(16),
-      decoration: BoxDecoration(
-        color: bgColor,
+  Widget _buildHelpCategory(
+    String title,
+    List<String> topics,
+    IconData icon,
+    Color color,
+    VoidCallback onTap,
+  ) {
+    return Card(
+      elevation: 2,
+      shape: RoundedRectangleBorder(
         borderRadius: BorderRadius.circular(16),
-        border: Border.all(color: bgColor.withOpacity(0.3)),
+        side: BorderSide(color: Colors.grey.shade100),
       ),
-      child: Column(
-        children: [
-          Container(
-            padding: const EdgeInsets.all(12),
-            decoration: BoxDecoration(
-              color: iconColor.withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(icon, color: iconColor, size: 24),
+      child: ListTile(
+        onTap: onTap,
+        leading: Container(
+          width: 50,
+          height: 50,
+          decoration: BoxDecoration(
+            color: color.withOpacity(0.1),
+            borderRadius: BorderRadius.circular(12),
           ),
-          const SizedBox(height: 12),
-          Text(
-            title,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w600,
-              color: Colors.grey.shade800,
-            ),
-          ),
-          const SizedBox(height: 4),
-          Text(
-            subtitle,
-            textAlign: TextAlign.center,
-            style: TextStyle(
-              fontSize: 11,
-              color: Colors.grey.shade600,
-            ),
-          ),
-        ],
-      ),
-    ),
-  );
-}
-
-Widget _buildHelpCategory(
-  String title,
-  List<String> topics,
-  IconData icon,
-  Color color,
-  VoidCallback onTap,
-) {
-  return Card(
-    elevation: 2,
-    shape: RoundedRectangleBorder(
-      borderRadius: BorderRadius.circular(16),
-      side: BorderSide(color: Colors.grey.shade100),
-    ),
-    child: ListTile(
-      onTap: onTap,
-      leading: Container(
-        width: 50,
-        height: 50,
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(12),
+          child: Icon(icon, color: color, size: 24),
         ),
-        child: Icon(icon, color: color, size: 24),
-      ),
-      title: Text(
-        title,
-        style: const TextStyle(
-          fontWeight: FontWeight.w600,
-          fontSize: 16,
+        title: Text(
+          title,
+          style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 16),
         ),
-      ),
-      subtitle: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          const SizedBox(height: 4),
-          Wrap(
-            spacing: 6,
-            runSpacing: 4,
-            children: topics
-                .map((topic) => Container(
+        subtitle: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SizedBox(height: 4),
+            Wrap(
+              spacing: 6,
+              runSpacing: 4,
+              children: topics
+                  .map(
+                    (topic) => Container(
                       padding: const EdgeInsets.symmetric(
                         horizontal: 8,
                         vertical: 4,
@@ -3476,142 +3599,145 @@ Widget _buildHelpCategory(
                           color: Colors.grey.shade700,
                         ),
                       ),
-                    ))
-                .toList(),
+                    ),
+                  )
+                  .toList(),
+            ),
+          ],
+        ),
+        trailing: Icon(
+          Icons.arrow_forward_ios,
+          size: 16,
+          color: Colors.grey.shade400,
+        ),
+        contentPadding: const EdgeInsets.symmetric(
+          horizontal: 16,
+          vertical: 12,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildFAQItem(String question, String answer) {
+    return ExpansionTile(
+      tilePadding: EdgeInsets.zero,
+      title: Text(
+        question,
+        style: TextStyle(
+          fontWeight: FontWeight.w500,
+          color: Colors.grey.shade800,
+        ),
+      ),
+      children: [
+        Padding(
+          padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
+          child: Text(answer, style: TextStyle(color: Colors.grey.shade600)),
+        ),
+      ],
+    );
+  }
+
+  Widget _buildContactInfoRow(
+    IconData icon,
+    String title,
+    String value,
+    Color color,
+  ) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 18),
+          const SizedBox(width: 12),
+          Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                title,
+                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              ),
+              Text(
+                value,
+                style: const TextStyle(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: Colors.black87,
+                ),
+              ),
+            ],
+          ),
+          const Spacer(),
+          IconButton(
+            icon: Container(
+              padding: const EdgeInsets.all(6),
+              decoration: BoxDecoration(
+                color: color.withOpacity(0.1),
+                shape: BoxShape.circle,
+              ),
+              child: Icon(Icons.content_copy, size: 14, color: color),
+            ),
+            onPressed: () async {
+              await Clipboard.setData(ClipboardData(text: value));
+              _showSuccessSnackbar('Disalin: $value');
+            },
           ),
         ],
       ),
-      trailing: Icon(
-        Icons.arrow_forward_ios,
-        size: 16,
-        color: Colors.grey.shade400,
-      ),
-      contentPadding: const EdgeInsets.symmetric(
-        horizontal: 16,
-        vertical: 12,
-      ),
-    ),
-  );
-}
+    );
+  }
 
-Widget _buildFAQItem(String question, String answer) {
-  return ExpansionTile(
-    tilePadding: EdgeInsets.zero,
-    title: Text(
-      question,
-      style: TextStyle(
-        fontWeight: FontWeight.w500,
-        color: Colors.grey.shade800,
-      ),
-    ),
-    children: [
-      Padding(
-        padding: const EdgeInsets.only(left: 16, right: 16, bottom: 16),
-        child: Text(
-          answer,
-          style: TextStyle(color: Colors.grey.shade600),
-        ),
-      ),
-    ],
-  );
-}
+  // Fungsi-fungsi untuk berbagai bantuan
 
-Widget _buildContactInfoRow(
-  IconData icon,
-  String title,
-  String value,
-  Color color,
-) {
-  return Padding(
-    padding: const EdgeInsets.symmetric(vertical: 8),
-    child: Row(
-      children: [
-        Icon(icon, color: color, size: 18),
-        const SizedBox(width: 12),
-        Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              title,
-              style: TextStyle(
-                fontSize: 12,
-                color: Colors.grey.shade600,
+  void _showAccountHelp(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Bantuan Akun & Profil'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildHelpStep(
+                '1. Edit Profil',
+                'Klik menu "Edit Profil" di halaman profil Anda',
               ),
-            ),
-            Text(
-              value,
-              style: const TextStyle(
-                fontSize: 14,
-                fontWeight: FontWeight.w500,
-                color: Colors.black87,
+              _buildHelpStep(
+                '2. Upload Foto',
+                'Pastikan foto jelas, ukuran maksimal 5MB',
               ),
-            ),
-          ],
-        ),
-        const Spacer(),
-        IconButton(
-          icon: Container(
-            padding: const EdgeInsets.all(6),
-            decoration: BoxDecoration(
-              color: color.withOpacity(0.1),
-              shape: BoxShape.circle,
-            ),
-            child: Icon(
-              Icons.content_copy,
-              size: 14,
-              color: color,
-            ),
+              _buildHelpStep(
+                '3. Reset Password',
+                'Gunakan fitur "Lupa Password" di halaman login',
+              ),
+              _buildHelpStep(
+                '4. Verifikasi Email',
+                'Cek email Anda untuk link verifikasi',
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Masih butuh bantuan? Hubungi customer service kami.',
+                style: TextStyle(fontSize: 12, color: Colors.grey),
+              ),
+            ],
           ),
-          onPressed: () async {
-            await Clipboard.setData(ClipboardData(text: value));
-            _showSuccessSnackbar('Disalin: $value');
-          },
         ),
-      ],
-    ),
-  );
-}
-
-// Fungsi-fungsi untuk berbagai bantuan
-
-void _showAccountHelp(BuildContext context) {
-  showDialog(
-    context: context,
-    builder: (context) => AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: const Text('Bantuan Akun & Profil'),
-      content: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildHelpStep('1. Edit Profil', 'Klik menu "Edit Profil" di halaman profil Anda'),
-            _buildHelpStep('2. Upload Foto', 'Pastikan foto jelas, ukuran maksimal 5MB'),
-            _buildHelpStep('3. Reset Password', 'Gunakan fitur "Lupa Password" di halaman login'),
-            _buildHelpStep('4. Verifikasi Email', 'Cek email Anda untuk link verifikasi'),
-            const SizedBox(height: 16),
-            const Text(
-              'Masih butuh bantuan? Hubungi customer service kami.',
-              style: TextStyle(fontSize: 12, color: Colors.grey),
-            ),
-          ],
-        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Tutup'),
+          ),
+          ElevatedButton(
+            onPressed: () => _makePhoneCall("+623417890123"),
+            child: const Text('Hubungi CS'),
+          ),
+        ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Tutup'),
-        ),
-        ElevatedButton(
-          onPressed: () => _makePhoneCall("+623417890123"),
-          child: const Text('Hubungi CS'),
-        ),
-      ],
-    ),
-  );
-}
+    );
+  }
 
-void _showContactDialog(BuildContext context) {
+  void _showContactDialog(BuildContext context) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -3802,715 +3928,895 @@ void _showContactDialog(BuildContext context) {
     }
   }
 
-void _showDocumentHelp(BuildContext context) {
-  showDialog(
-    context: context,
-    builder: (context) => AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: const Text('Bantuan Dokumen & Verifikasi'),
-      content: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              '📋 Persyaratan Dokumen KK:',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
-            _buildBulletPoint('Format: JPG, PNG, atau PDF'),
-            _buildBulletPoint('Maksimal 5MB'),
-            _buildBulletPoint('Foto jelas, semua informasi terbaca'),
-            _buildBulletPoint('Dokumen masih berlaku'),
-            const SizedBox(height: 12),
-            const Text(
-              '⏱️ Timeline Verifikasi:',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
-            _buildBulletPoint('Review awal: 1-2 jam'),
-            _buildBulletPoint('Verifikasi lengkap: 1-3 hari kerja'),
-            _buildBulletPoint('Notifikasi real-time saat status berubah'),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.orange.shade50,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Text(
-                'Pastikan dokumen asli siap untuk verifikasi offline jika diperlukan',
-                style: TextStyle(fontSize: 12),
-              ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Tutup'),
-        ),
-        ElevatedButton(
-          onPressed: () => _showUploadKKDialog(context),
-          child: const Text('Upload KK'),
-        ),
-      ],
-    ),
-  );
-}
-
-void _showTechnicalHelp(BuildContext context) {
-  showDialog(
-    context: context,
-    builder: (context) => AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: const Text('Bantuan Teknis'),
-      content: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            _buildTroubleshootingStep(
-              'Aplikasi crash/error',
-              '1. Tutup aplikasi\n2. Clear cache\n3. Update aplikasi\n4. Restart perangkat',
-            ),
-            _buildTroubleshootingStep(
-              'Notifikasi tidak muncul',
-              '1. Cek pengaturan notifikasi\n2. Pastikan koneksi internet\n3. Update aplikasi',
-            ),
-            _buildTroubleshootingStep(
-              'Masalah internet',
-              '1. Restart WiFi/mobile data\n2. Cek sinyal\n3. Coba jaringan lain',
-            ),
-            const SizedBox(height: 16),
-            const Text(
-              'Informasi Aplikasi:',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
-            _buildBulletPoint('Versi: 1.0.0'),
-            _buildBulletPoint('Ukuran: ~50MB'),
-            _buildBulletPoint('OS Minimal: Android 8.0 / iOS 12'),
-            _buildBulletPoint('Terakhir Update: Desember 2024'),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Tutup'),
-        ),
-        ElevatedButton(
-          onPressed: () => _showReportProblemDialog(context),
-          child: const Text('Laporkan Masalah'),
-        ),
-      ],
-    ),
-  );
-}
-
-void _showSecurityHelp(BuildContext context) {
-  showDialog(
-    context: context,
-    builder: (context) => AlertDialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-      title: const Text('Bantuan Keamanan & Privasi'),
-      content: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            const Text(
-              '🔒 Tips Keamanan Akun:',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
-            _buildBulletPoint('Gunakan password yang kuat'),
-            _buildBulletPoint('Jangan bagikan kredensial login'),
-            _buildBulletPoint('Logout dari perangkat bersama'),
-            _buildBulletPoint('Aktifkan verifikasi 2 langkah'),
-            const SizedBox(height: 12),
-            const Text(
-              '📝 Lapor Aktivitas Mencurigakan:',
-              style: TextStyle(fontWeight: FontWeight.w600),
-            ),
-            const Text(
-              'Jika Anda melihat aktivitas mencurigakan pada akun Anda:',
-              style: TextStyle(fontSize: 12),
-            ),
-            _buildBulletPoint('Segera ubah password'),
-            _buildBulletPoint('Hubungi customer service'),
-            _buildBulletPoint('Laporkan ke admin komunitas'),
-            const SizedBox(height: 16),
-            Container(
-              padding: const EdgeInsets.all(12),
-              decoration: BoxDecoration(
-                color: Colors.red.shade50,
-                borderRadius: BorderRadius.circular(8),
-              ),
-              child: const Text(
-                'Kami TIDAK PERNAH meminta password melalui telepon atau email. Hati-hati dengan phishing!',
-                style: TextStyle(fontSize: 12, color: Colors.red),
-              ),
-            ),
-          ],
-        ),
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Tutup'),
-        ),
-        TextButton(
-          onPressed: () => _showPrivacyPolicy(context),
-          child: const Text('Kebijakan Privasi'),
-        ),
-      ],
-    ),
-  );
-}
-
-void _showFullFAQ(BuildContext context) {
-  showModalBottomSheet(
-    context: context,
-    isScrollControlled: true,
-    backgroundColor: Colors.transparent,
-    builder: (context) {
-      return Container(
-        height: MediaQuery.of(context).size.height * 0.9,
-        decoration: const BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.only(
-            topLeft: Radius.circular(24),
-            topRight: Radius.circular(24),
-          ),
-        ),
-        child: Column(
-          children: [
-            // Header
-            Container(
-              padding: const EdgeInsets.all(24),
-              decoration: BoxDecoration(
-                color: Colors.blue.shade700,
-                borderRadius: const BorderRadius.only(
-                  topLeft: Radius.circular(24),
-                  topRight: Radius.circular(24),
-                ),
-              ),
-              child: Row(
-                children: [
-                  IconButton(
-                    icon: const Icon(Icons.arrow_back, color: Colors.white),
-                    onPressed: () => Navigator.pop(context),
-                  ),
-                  const SizedBox(width: 12),
-                  const Text(
-                    'FAQ Lengkap',
-                    style: TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
-                    ),
-                  ),
-                ],
-              ),
-            ),
-
-            // FAQ Content
-            Expanded(
-              child: SingleChildScrollView(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  children: [
-                    _buildDetailedFAQItem(
-                      'Bagaimana cara mendaftar di Warga App?',
-                      'Pendaftaran dilakukan melalui undangan dari admin komunitas. Hubungi admin RT/RW setempat untuk mendapatkan kode pendaftaran.',
-                    ),
-                    _buildDetailedFAQItem(
-                      'Apa syarat menggunakan aplikasi?',
-                      '1. Warga yang tercatat di lingkungan tersebut\n2. Memiliki smartphone dengan internet\n3. Dokumen KK yang valid\n4. Email aktif',
-                    ),
-                    _buildDetailedFAQItem(
-                      'Apakah aplikasi ini gratis?',
-                      'Ya, aplikasi Warga App sepenuhnya gratis untuk digunakan oleh warga terdaftar.',
-                    ),
-                    _buildDetailedFAQItem(
-                      'Data saya aman tidak?',
-                      'Data Anda dilindungi dengan enkripsi tingkat tinggi dan hanya digunakan untuk keperluan layanan komunitas sesuai Kebijakan Privasi.',
-                    ),
-                    _buildDetailedFAQItem(
-                      'Bagaimana jika saya ganti nomor HP?',
-                      'Hubungi admin untuk update data. Anda perlu verifikasi ulang dengan nomor baru.',
-                    ),
-                    _buildDetailedFAQItem(
-                      'Apakah bisa digunakan di luar kota?',
-                      'Bisa, selama ada koneksi internet. Beberapa fitur mungkin memerlukan verifikasi lokasi.',
-                    ),
-                    _buildDetailedFAQItem(
-                      'Bagaimana cara hapus akun?',
-                      'Kirim permintaan ke admin melalui aplikasi atau hubungi customer service.',
-                    ),
-                    _buildDetailedFAQItem(
-                      'Aplikasi tidak bisa dibuka, kenapa?',
-                      '1. Pastikan sudah update ke versi terbaru\n2. Clear cache aplikasi\n3. Restart perangkat\n4. Cek koneksi internet',
-                    ),
-                    _buildDetailedFAQItem(
-                      'Notifikasi tidak muncul, solusinya?',
-                      '1. Cek pengaturan notifikasi di perangkat\n2. Pastikan aplikasi tidak di-force stop\n3. Update aplikasi ke versi terbaru',
-                    ),
-                    _buildDetailedFAQItem(
-                      'Kapan update fitur baru?',
-                      'Kami melakukan update rutin setiap bulan. Info update tersedia di pengumuman aplikasi.',
-                    ),
-                  ],
-                ),
-              ),
-            ),
-
-            
-
-            // Footer
-            Container(
-              padding: const EdgeInsets.all(20),
-              decoration: BoxDecoration(
-                border: Border(top: BorderSide(color: Colors.grey.shade200)),
-              ),
-              child: ElevatedButton(
-                onPressed: () => _showContactDialog(context),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.blue.shade600,
-                  minimumSize: const Size(double.infinity, 50),
-                ),
-                child: const Text(
-                  'Butuh Bantuan Lebih Lanjut? Hubungi Kami',
-                  style: TextStyle(fontWeight: FontWeight.w600),
-                ),
-              ),
-            ),
-          ],
-        ),
-      );
-    },
-  );
-}
-
-Widget _buildHelpStep(String step, String description) {
-  return Padding(
-    padding: const EdgeInsets.symmetric(vertical: 8),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Container(
-          padding: const EdgeInsets.all(4),
-          decoration: BoxDecoration(
-            color: Colors.blue.shade100,
-            shape: BoxShape.circle,
-          ),
-          child: const Icon(Icons.check, size: 12, color: Colors.blue),
-        ),
-        const SizedBox(width: 12),
-        Expanded(
+  void _showDocumentHelp(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Bantuan Dokumen & Verifikasi'),
+        content: SingleChildScrollView(
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
             children: [
-              Text(
-                step,
-                style: const TextStyle(fontWeight: FontWeight.w500),
+              const Text(
+                '📋 Persyaratan Dokumen KK:',
+                style: TextStyle(fontWeight: FontWeight.w600),
               ),
-              Text(
-                description,
-                style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+              _buildBulletPoint('Format: JPG, PNG, atau PDF'),
+              _buildBulletPoint('Maksimal 5MB'),
+              _buildBulletPoint('Foto jelas, semua informasi terbaca'),
+              _buildBulletPoint('Dokumen masih berlaku'),
+              const SizedBox(height: 12),
+              const Text(
+                '⏱️ Timeline Verifikasi:',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              _buildBulletPoint('Review awal: 1-2 jam'),
+              _buildBulletPoint('Verifikasi lengkap: 1-3 hari kerja'),
+              _buildBulletPoint('Notifikasi real-time saat status berubah'),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.orange.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  'Pastikan dokumen asli siap untuk verifikasi offline jika diperlukan',
+                  style: TextStyle(fontSize: 12),
+                ),
               ),
             ],
           ),
         ),
-      ],
-    ),
-  );
-}
-
-Widget _buildBulletPoint(String text) {
-  return Padding(
-    padding: const EdgeInsets.symmetric(vertical: 2),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        const Text('• ', style: TextStyle(fontSize: 16)),
-        Expanded(child: Text(text)),
-      ],
-    ),
-  );
-}
-
-Widget _buildTroubleshootingStep(String problem, String solution) {
-  return Container(
-    margin: const EdgeInsets.symmetric(vertical: 8),
-    padding: const EdgeInsets.all(12),
-    decoration: BoxDecoration(
-      color: Colors.grey.shade50,
-      borderRadius: BorderRadius.circular(8),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Text(
-          problem,
-          style: const TextStyle(fontWeight: FontWeight.w500),
-        ),
-        const SizedBox(height: 4),
-        Text(
-          solution,
-          style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
-        ),
-      ],
-    ),
-  );
-}
-
-Widget _buildDetailedFAQItem(String question, String answer) {
-  return Container(
-    margin: const EdgeInsets.only(bottom: 16),
-    padding: const EdgeInsets.all(16),
-    decoration: BoxDecoration(
-      color: Colors.grey.shade50,
-      borderRadius: BorderRadius.circular(12),
-      border: Border.all(color: Colors.grey.shade200),
-    ),
-    child: Column(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Row(
-          children: [
-            Icon(
-              Icons.help_outline,
-              color: Colors.blue.shade600,
-              size: 18,
-            ),
-            const SizedBox(width: 8),
-            Expanded(
-              child: Text(
-                question,
-                style: const TextStyle(
-                  fontWeight: FontWeight.w600,
-                  fontSize: 15,
-                ),
-              ),
-            ),
-          ],
-        ),
-        const SizedBox(height: 8),
-        Padding(
-          padding: const EdgeInsets.only(left: 26),
-          child: Text(
-            answer,
-            style: TextStyle(
-              color: Colors.grey.shade700,
-              fontSize: 14,
-              height: 1.5,
-            ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Tutup'),
           ),
-        ),
-      ],
-    ),
-  );
-}
-
-// Fungsi-fungsi aksi
-
-// void _makePhoneCall(String phoneNumber) async {
-//   final Uri launchUri = Uri(
-//     scheme: 'tel',
-//     path: phoneNumber,
-//   );
-//   if (await canLaunchUrl(launchUri)) {
-//     await launchUrl(launchUri);
-//   } else {
-//     _showErrorSnackbar('Tidak dapat membuka aplikasi telepon');
-//   }
-// }
-
-void _startLiveChat(BuildContext context) {
-  // Implement live chat functionality
-  showDialog(
-    context: context,
-    builder: (context) => AlertDialog(
-      title: const Text('Chat Langsung'),
-      content: const Column(
-        mainAxisSize: MainAxisSize.min,
-        children: [
-          Icon(Icons.chat_bubble_outline, size: 60, color: Colors.blue),
-          SizedBox(height: 16),
-          Text(
-            'Fitur chat langsung akan segera hadir!',
-            textAlign: TextAlign.center,
-          ),
-          SizedBox(height: 8),
-          Text(
-            'Untuk sementara, hubungi kami via WhatsApp atau telepon.',
-            style: TextStyle(fontSize: 12, color: Colors.grey),
-            textAlign: TextAlign.center,
+          ElevatedButton(
+            onPressed: () => _showUploadKKDialog(context),
+            child: const Text('Upload KK'),
           ),
         ],
       ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: const Text('Tutup'),
-        ),
-        ElevatedButton(
-          onPressed: () {
-            Navigator.pop(context);
-            _makePhoneCall("+623417890123");
-          },
-          child: const Text('Telepon Sekarang'),
-        ),
-      ],
-    ),
-  );
-}
+    );
+  }
 
-void _showReportProblemDialog(BuildContext context) {
-  final problemController = TextEditingController();
-  String selectedCategory = 'Umum';
-  bool _isSubmitting = false;
-
-  showDialog(
-    context: context,
-    builder: (context) => StatefulBuilder(
-      builder: (context, setState) {
-        return Dialog(
-          shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(20),
+  void _showTechnicalHelp(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Bantuan Teknis'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              _buildTroubleshootingStep(
+                'Aplikasi crash/error',
+                '1. Tutup aplikasi\n2. Clear cache\n3. Update aplikasi\n4. Restart perangkat',
+              ),
+              _buildTroubleshootingStep(
+                'Notifikasi tidak muncul',
+                '1. Cek pengaturan notifikasi\n2. Pastikan koneksi internet\n3. Update aplikasi',
+              ),
+              _buildTroubleshootingStep(
+                'Masalah internet',
+                '1. Restart WiFi/mobile data\n2. Cek sinyal\n3. Coba jaringan lain',
+              ),
+              const SizedBox(height: 16),
+              const Text(
+                'Informasi Aplikasi:',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              _buildBulletPoint('Versi: 1.0.0'),
+              _buildBulletPoint('Ukuran: ~50MB'),
+              _buildBulletPoint('OS Minimal: Android 8.0 / iOS 12'),
+              _buildBulletPoint('Terakhir Update: Desember 2024'),
+            ],
           ),
-          child: Container(
-            constraints: BoxConstraints(
-              maxHeight: MediaQuery.of(context).size.height * 0.8,
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Tutup'),
+          ),
+          ElevatedButton(
+            onPressed: () => _showReportProblemDialog(context),
+            child: const Text('Laporkan Masalah'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showSecurityHelp(BuildContext context) {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: const Text('Bantuan Keamanan & Privasi'),
+        content: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Text(
+                '🔒 Tips Keamanan Akun:',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              _buildBulletPoint('Gunakan password yang kuat'),
+              _buildBulletPoint('Jangan bagikan kredensial login'),
+              _buildBulletPoint('Logout dari perangkat bersama'),
+              _buildBulletPoint('Aktifkan verifikasi 2 langkah'),
+              const SizedBox(height: 12),
+              const Text(
+                '📝 Lapor Aktivitas Mencurigakan:',
+                style: TextStyle(fontWeight: FontWeight.w600),
+              ),
+              const Text(
+                'Jika Anda melihat aktivitas mencurigakan pada akun Anda:',
+                style: TextStyle(fontSize: 12),
+              ),
+              _buildBulletPoint('Segera ubah password'),
+              _buildBulletPoint('Hubungi customer service'),
+              _buildBulletPoint('Laporkan ke admin komunitas'),
+              const SizedBox(height: 16),
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.red.shade50,
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: const Text(
+                  'Kami TIDAK PERNAH meminta password melalui telepon atau email. Hati-hati dengan phishing!',
+                  style: TextStyle(fontSize: 12, color: Colors.red),
+                ),
+              ),
+            ],
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Tutup'),
+          ),
+          TextButton(
+            onPressed: () => _showPrivacyPolicy(context),
+            child: const Text('Kebijakan Privasi'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showFullFAQ(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Container(
+          height: MediaQuery.of(context).size.height * 0.9,
+          decoration: const BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.only(
+              topLeft: Radius.circular(24),
+              topRight: Radius.circular(24),
             ),
-            child: Column(
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                // Header
-                Container(
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    color: Colors.red.shade600,
-                    borderRadius: const BorderRadius.only(
-                      topLeft: Radius.circular(20),
-                      topRight: Radius.circular(20),
-                    ),
+          ),
+          child: Column(
+            children: [
+              // Header
+              Container(
+                padding: const EdgeInsets.all(24),
+                decoration: BoxDecoration(
+                  color: Colors.blue.shade700,
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(24),
+                    topRight: Radius.circular(24),
                   ),
-                  child: Row(
-                    children: [
-                      const Icon(Icons.bug_report, color: Colors.white, size: 28),
-                      const SizedBox(width: 12),
-                      const Expanded(
-                        child: Text(
-                          'Laporkan Masalah',
-                          style: TextStyle(
-                            fontSize: 20,
-                            fontWeight: FontWeight.bold,
-                            color: Colors.white,
-                          ),
-                        ),
+                ),
+                child: Row(
+                  children: [
+                    IconButton(
+                      icon: const Icon(Icons.arrow_back, color: Colors.white),
+                      onPressed: () => Navigator.pop(context),
+                    ),
+                    const SizedBox(width: 12),
+                    const Text(
+                      'FAQ Lengkap',
+                      style: TextStyle(
+                        fontSize: 20,
+                        fontWeight: FontWeight.bold,
+                        color: Colors.white,
                       ),
-                      IconButton(
-                        icon: const Icon(Icons.close, color: Colors.white),
-                        onPressed: () => Navigator.pop(context),
+                    ),
+                  ],
+                ),
+              ),
+
+              // FAQ Content
+              Expanded(
+                child: SingleChildScrollView(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    children: [
+                      _buildDetailedFAQItem(
+                        'Bagaimana cara mendaftar di Warga App?',
+                        'Pendaftaran dilakukan melalui undangan dari admin komunitas. Hubungi admin RT/RW setempat untuk mendapatkan kode pendaftaran.',
+                      ),
+                      _buildDetailedFAQItem(
+                        'Apa syarat menggunakan aplikasi?',
+                        '1. Warga yang tercatat di lingkungan tersebut\n2. Memiliki smartphone dengan internet\n3. Dokumen KK yang valid\n4. Email aktif',
+                      ),
+                      _buildDetailedFAQItem(
+                        'Apakah aplikasi ini gratis?',
+                        'Ya, aplikasi Warga App sepenuhnya gratis untuk digunakan oleh warga terdaftar.',
+                      ),
+                      _buildDetailedFAQItem(
+                        'Data saya aman tidak?',
+                        'Data Anda dilindungi dengan enkripsi tingkat tinggi dan hanya digunakan untuk keperluan layanan komunitas sesuai Kebijakan Privasi.',
+                      ),
+                      _buildDetailedFAQItem(
+                        'Bagaimana jika saya ganti nomor HP?',
+                        'Hubungi admin untuk update data. Anda perlu verifikasi ulang dengan nomor baru.',
+                      ),
+                      _buildDetailedFAQItem(
+                        'Apakah bisa digunakan di luar kota?',
+                        'Bisa, selama ada koneksi internet. Beberapa fitur mungkin memerlukan verifikasi lokasi.',
+                      ),
+                      _buildDetailedFAQItem(
+                        'Bagaimana cara hapus akun?',
+                        'Kirim permintaan ke admin melalui aplikasi atau hubungi customer service.',
+                      ),
+                      _buildDetailedFAQItem(
+                        'Aplikasi tidak bisa dibuka, kenapa?',
+                        '1. Pastikan sudah update ke versi terbaru\n2. Clear cache aplikasi\n3. Restart perangkat\n4. Cek koneksi internet',
+                      ),
+                      _buildDetailedFAQItem(
+                        'Notifikasi tidak muncul, solusinya?',
+                        '1. Cek pengaturan notifikasi di perangkat\n2. Pastikan aplikasi tidak di-force stop\n3. Update aplikasi ke versi terbaru',
+                      ),
+                      _buildDetailedFAQItem(
+                        'Kapan update fitur baru?',
+                        'Kami melakukan update rutin setiap bulan. Info update tersedia di pengumuman aplikasi.',
                       ),
                     ],
                   ),
                 ),
+              ),
 
-                // Content
-                Expanded(
-                  child: SingleChildScrollView(
-                    padding: const EdgeInsets.all(24),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      children: [
-                        const Text(
-                          'Kategori Masalah',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: [
-                            'Umum',
-                            'Teknis',
-                            'Akun',
-                            'Dokumen',
-                            'Notifikasi',
-                            'Lainnya',
-                          ].map((category) {
-                            return ChoiceChip(
-                              label: Text(category),
-                              selected: selectedCategory == category,
-                              onSelected: (selected) {
-                                setState(() => selectedCategory = category);
-                              },
-                            );
-                          }).toList(),
-                        ),
-                        const SizedBox(height: 24),
-
-                        const Text(
-                          'Deskripsi Masalah',
-                          style: TextStyle(
-                            fontWeight: FontWeight.w600,
-                            fontSize: 16,
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        TextField(
-                          controller: problemController,
-                          maxLines: 5,
-                          decoration: InputDecoration(
-                            hintText:
-                                'Jelaskan masalah yang Anda alami secara detail...',
-                            border: OutlineInputBorder(
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                          ),
-                        ),
-                        const SizedBox(height: 8),
-                        Text(
-                          'Sertakan: perangkat, langkah reproduksi, waktu kejadian',
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: Colors.grey.shade600,
-                          ),
-                        ),
-
-                        const SizedBox(height: 24),
-
-                        Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: Colors.blue.shade50,
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                '📸 Screenshot (Opsional)',
-                                style: TextStyle(fontWeight: FontWeight.w600),
-                              ),
-                              const SizedBox(height: 8),
-                              ElevatedButton.icon(
-                                onPressed: () async {
-                                  // Implement screenshot capture
-                                  _showSuccessSnackbar(
-                                    'Fitur screenshot akan datang',
-                                  );
-                                },
-                                icon: const Icon(Icons.camera_alt, size: 18),
-                                label: const Text('Ambil Screenshot'),
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.white,
-                                  foregroundColor: Colors.blue.shade700,
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                'Screenshot membantu kami memahami masalah lebih cepat',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: Colors.grey.shade600,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-
-                        const SizedBox(height: 24),
-
-                        // System Info
-                        Container(
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.grey.shade100,
-                            borderRadius: BorderRadius.circular(8),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              const Text(
-                                'ℹ️ Informasi Sistem',
-                                style: TextStyle(fontWeight: FontWeight.w600),
-                              ),
-                              const SizedBox(height: 4),
-                              Text('Aplikasi: Warga App v1.0.0'),
-                              Text('Perangkat: ${Platform.operatingSystem}'),
-                              Text('Tanggal: ${DateTime.now().toLocal()}'),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
+              // Footer
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  border: Border(top: BorderSide(color: Colors.grey.shade200)),
+                ),
+                child: ElevatedButton(
+                  onPressed: () => _showContactDialog(context),
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: Colors.blue.shade600,
+                    minimumSize: const Size(double.infinity, 50),
+                  ),
+                  child: const Text(
+                    'Butuh Bantuan Lebih Lanjut? Hubungi Kami',
+                    style: TextStyle(fontWeight: FontWeight.w600),
                   ),
                 ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 
-                // Footer
-                Container(
-                  padding: const EdgeInsets.all(20),
-                  decoration: BoxDecoration(
-                    border: Border(top: BorderSide(color: Colors.grey.shade200)),
-                  ),
-                  child: _isSubmitting
-                      ? const CircularProgressIndicator()
-                      : Row(
-                          children: [
-                            Expanded(
-                              child: OutlinedButton(
-                                onPressed: () => Navigator.pop(context),
-                                child: const Text('Batal'),
-                              ),
-                            ),
-                            const SizedBox(width: 12),
-                            Expanded(
-                              child: ElevatedButton(
-                                onPressed: () async {
-                                  if (problemController.text.isEmpty) {
-                                    _showErrorSnackbar(
-                                      'Harap isi deskripsi masalah',
-                                    );
-                                    return;
-                                  }
-
-                                  setState(() => _isSubmitting = true);
-
-                                  // Simulate submission
-                                  await Future.delayed(
-                                    const Duration(seconds: 2),
-                                  );
-
-                                  _showSuccessSnackbar(
-                                    'Laporan berhasil dikirim. Kami akan segera menindaklanjuti.',
-                                  );
-                                  Navigator.pop(context);
-                                },
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: Colors.red.shade600,
-                                ),
-                                child: const Text('Kirim Laporan'),
-                              ),
-                            ),
-                          ],
-                        ),
+  Widget _buildHelpStep(String step, String description) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Container(
+            padding: const EdgeInsets.all(4),
+            decoration: BoxDecoration(
+              color: Colors.blue.shade100,
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(Icons.check, size: 12, color: Colors.blue),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(step, style: const TextStyle(fontWeight: FontWeight.w500)),
+                Text(
+                  description,
+                  style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
                 ),
               ],
             ),
           ),
-        );
-      },
-    ),
-  );
-}
+        ],
+      ),
+    );
+  }
 
- void _showPrivacyPolicy(BuildContext context) {
+  Widget _buildBulletPoint(String text) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 2),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          const Text('• ', style: TextStyle(fontSize: 16)),
+          Expanded(child: Text(text)),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildTroubleshootingStep(String problem, String solution) {
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 8),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(8),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(problem, style: const TextStyle(fontWeight: FontWeight.w500)),
+          const SizedBox(height: 4),
+          Text(
+            solution,
+            style: TextStyle(fontSize: 12, color: Colors.grey.shade700),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildDetailedFAQItem(String question, String answer) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.grey.shade50,
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: Colors.grey.shade200),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              Icon(Icons.help_outline, color: Colors.blue.shade600, size: 18),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Text(
+                  question,
+                  style: const TextStyle(
+                    fontWeight: FontWeight.w600,
+                    fontSize: 15,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          Padding(
+            padding: const EdgeInsets.only(left: 26),
+            child: Text(
+              answer,
+              style: TextStyle(
+                color: Colors.grey.shade700,
+                fontSize: 14,
+                height: 1.5,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // Fungsi-fungsi aksi
+
+  // void _makePhoneCall(String phoneNumber) async {
+  //   final Uri launchUri = Uri(
+  //     scheme: 'tel',
+  //     path: phoneNumber,
+  //   );
+  //   if (await canLaunchUrl(launchUri)) {
+  //     await launchUrl(launchUri);
+  //   } else {
+  //     _showErrorSnackbar('Tidak dapat membuka aplikasi telepon');
+  //   }
+  // }
+
+  void _startLiveChat(BuildContext context) {
+    // Implement live chat functionality
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Chat Langsung'),
+        content: const Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(Icons.chat_bubble_outline, size: 60, color: Colors.blue),
+            SizedBox(height: 16),
+            Text(
+              'Fitur chat langsung akan segera hadir!',
+              textAlign: TextAlign.center,
+            ),
+            SizedBox(height: 8),
+            Text(
+              'Untuk sementara, hubungi kami via WhatsApp atau telepon.',
+              style: TextStyle(fontSize: 12, color: Colors.grey),
+              textAlign: TextAlign.center,
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context),
+            child: const Text('Tutup'),
+          ),
+          ElevatedButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _makePhoneCall("+623417890123");
+            },
+            child: const Text('Telepon Sekarang'),
+          ),
+        ],
+      ),
+    );
+  }
+
+  void _showReportProblemDialog(BuildContext context) {
+    final problemController = TextEditingController();
+    String selectedCategory = 'Umum';
+    bool _isSubmitting = false;
+    String? selectedImagePath;
+
+    showDialog(
+      context: context,
+      builder: (context) => StatefulBuilder(
+        builder: (context, setState) {
+          return Dialog(
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Container(
+              constraints: BoxConstraints(
+                maxHeight: MediaQuery.of(context).size.height * 0.85,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  // Header
+                  Container(
+                    padding: const EdgeInsets.all(24),
+                    decoration: BoxDecoration(
+                      color: Colors.red.shade600,
+                      borderRadius: const BorderRadius.only(
+                        topLeft: Radius.circular(20),
+                        topRight: Radius.circular(20),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(
+                          Icons.bug_report,
+                          color: Colors.white,
+                          size: 28,
+                        ),
+                        const SizedBox(width: 12),
+                        const Expanded(
+                          child: Text(
+                            'Laporkan Masalah',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                            ),
+                          ),
+                        ),
+                        IconButton(
+                          icon: const Icon(Icons.close, color: Colors.white),
+                          onPressed: () => Navigator.pop(context),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Content
+                  Expanded(
+                    child: SingleChildScrollView(
+                      padding: const EdgeInsets.all(24),
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          const Text(
+                            'Kategori Masalah',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 16,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children:
+                                [
+                                  'Umum',
+                                  'Teknis',
+                                  'Akun',
+                                  'Dokumen',
+                                  'Notifikasi',
+                                  'Lainnya',
+                                ].map((category) {
+                                  return ChoiceChip(
+                                    label: Text(category),
+                                    selected: selectedCategory == category,
+                                    onSelected: (selected) {
+                                      setState(
+                                        () => selectedCategory = category,
+                                      );
+                                    },
+                                  );
+                                }).toList(),
+                          ),
+                          const SizedBox(height: 24),
+
+                          const Text(
+                            'Deskripsi Masalah',
+                            style: TextStyle(
+                              fontWeight: FontWeight.w600,
+                              fontSize: 16,
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          TextField(
+                            controller: problemController,
+                            maxLines: 5,
+                            decoration: InputDecoration(
+                              hintText:
+                                  'Jelaskan masalah yang Anda alami secara detail...',
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            'Sertakan: perangkat, langkah reproduksi, waktu kejadian',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+
+                          const SizedBox(height: 24),
+
+                          // Screenshot Section
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.blue.shade50,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  '📸 Screenshot (Opsional)',
+                                  style: TextStyle(fontWeight: FontWeight.w600),
+                                ),
+                                const SizedBox(height: 8),
+
+                                if (selectedImagePath != null)
+                                  Container(
+                                    margin: const EdgeInsets.only(bottom: 12),
+                                    child: Stack(
+                                      children: [
+                                        ClipRRect(
+                                          borderRadius: BorderRadius.circular(
+                                            8,
+                                          ),
+                                          child: Image.file(
+                                            File(selectedImagePath!),
+                                            height: 100,
+                                            fit: BoxFit.cover,
+                                          ),
+                                        ),
+                                        Positioned(
+                                          top: 4,
+                                          right: 4,
+                                          child: GestureDetector(
+                                            onTap: () {
+                                              setState(
+                                                () => selectedImagePath = null,
+                                              );
+                                            },
+                                            child: Container(
+                                              padding: const EdgeInsets.all(4),
+                                              decoration: BoxDecoration(
+                                                color: Colors.black.withOpacity(
+                                                  0.6,
+                                                ),
+                                                shape: BoxShape.circle,
+                                              ),
+                                              child: const Icon(
+                                                Icons.close,
+                                                color: Colors.white,
+                                                size: 16,
+                                              ),
+                                            ),
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+
+                                Row(
+                                  children: [
+                                    ElevatedButton.icon(
+                                      onPressed: () async {
+                                        final picker = ImagePicker();
+                                        final pickedFile = await picker
+                                            .pickImage(
+                                              source: ImageSource.gallery,
+                                              maxWidth: 800,
+                                              maxHeight: 800,
+                                              imageQuality: 85,
+                                            );
+
+                                        if (pickedFile != null) {
+                                          setState(
+                                            () => selectedImagePath =
+                                                pickedFile.path,
+                                          );
+                                        }
+                                      },
+                                      icon: const Icon(Icons.photo, size: 18),
+                                      label: const Text('Pilih Gambar'),
+                                      style: ElevatedButton.styleFrom(
+                                        backgroundColor: Colors.white,
+                                        foregroundColor: Colors.blue.shade700,
+                                      ),
+                                    ),
+                                    const SizedBox(width: 8),
+                                    if (selectedImagePath == null)
+                                      ElevatedButton.icon(
+                                        onPressed: () async {
+                                          // Implement screenshot capture
+                                          _showSuccessSnackbar(
+                                            'Fitur screenshot akan datang',
+                                          );
+                                        },
+                                        icon: const Icon(
+                                          Icons.screenshot,
+                                          size: 18,
+                                        ),
+                                        label: const Text('Ambil Screenshot'),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.white,
+                                          foregroundColor:
+                                              Colors.green.shade700,
+                                        ),
+                                      ),
+                                  ],
+                                ),
+                                const SizedBox(height: 8),
+                                Text(
+                                  'Gambar membantu kami memahami masalah lebih cepat',
+                                  style: TextStyle(
+                                    fontSize: 12,
+                                    color: Colors.grey.shade600,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          const SizedBox(height: 24),
+
+                          // System Info
+                          Container(
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Colors.grey.shade100,
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  'ℹ️ Informasi Sistem',
+                                  style: TextStyle(fontWeight: FontWeight.w600),
+                                ),
+                                const SizedBox(height: 4),
+                                Text('Aplikasi: Warga App v1.0.0'),
+                                Text('Perangkat: ${Platform.operatingSystem}'),
+                                Text('Tanggal: ${DateTime.now().toLocal()}'),
+                                Text(
+                                  'Pengguna: ${_currentUser.namaLengkap ?? 'N/A'}',
+                                ),
+                              ],
+                            ),
+                          ),
+
+                          const SizedBox(height: 16),
+
+                          // Pilihan Pengiriman
+                          Container(
+                            padding: const EdgeInsets.all(16),
+                            decoration: BoxDecoration(
+                              color: Colors.orange.shade50,
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                const Text(
+                                  '📤 Pilih Metode Pengiriman',
+                                  style: TextStyle(
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.black87,
+                                  ),
+                                ),
+                                const SizedBox(height: 12),
+                                Row(
+                                  children: [
+                                    Expanded(
+                                      child: _buildDeliveryOption(
+                                        icon: Icons.email,
+                                        label: 'Email',
+                                        color: Colors.blue.shade600,
+                                        onTap: () async {
+                                          await _sendReportViaEmail(
+                                            category: selectedCategory,
+                                            description: problemController.text,
+                                            imagePath: selectedImagePath,
+                                          );
+                                          if (mounted) Navigator.pop(context);
+                                        },
+                                      ),
+                                    ),
+                                    const SizedBox(width: 12),
+                                    Expanded(
+                                      child: _buildDeliveryOption(
+                                        icon: Icons.chat,
+                                        label: 'WhatsApp',
+                                        color: Colors.green.shade600,
+                                        onTap: () async {
+                                          await _sendReportViaWhatsApp(
+                                            category: selectedCategory,
+                                            description: problemController.text,
+                                          );
+                                          if (mounted) Navigator.pop(context);
+                                        },
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ),
+
+                  // Footer
+                  Container(
+                    padding: const EdgeInsets.all(20),
+                    decoration: BoxDecoration(
+                      border: Border(
+                        top: BorderSide(color: Colors.grey.shade200),
+                      ),
+                    ),
+                    child: _isSubmitting
+                        ? const CircularProgressIndicator()
+                        : Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton(
+                                  onPressed: () => Navigator.pop(context),
+                                  child: const Text('Batal'),
+                                ),
+                              ),
+                              const SizedBox(width: 12),
+                              Expanded(
+                                child: ElevatedButton(
+                                  onPressed: () async {
+                                    if (problemController.text.isEmpty) {
+                                      _showErrorSnackbar(
+                                        'Harap isi deskripsi masalah',
+                                      );
+                                      return;
+                                    }
+
+                                    setState(() => _isSubmitting = true);
+
+                                    // Tampilkan pilihan pengiriman
+                                    final method =
+                                        await _showDeliveryMethodDialog(
+                                          context,
+                                        );
+
+                                    if (method == 'email') {
+                                      await _sendReportViaEmail(
+                                        category: selectedCategory,
+                                        description: problemController.text,
+                                        imagePath: selectedImagePath,
+                                      );
+                                    } else if (method == 'whatsapp') {
+                                      await _sendReportViaWhatsApp(
+                                        category: selectedCategory,
+                                        description: problemController.text,
+                                      );
+                                    }
+
+                                    if (mounted) Navigator.pop(context);
+                                  },
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: Colors.red.shade600,
+                                  ),
+                                  child: const Text('Laporkan Sekarang'),
+                                ),
+                              ),
+                            ],
+                          ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildDeliveryOption({
+    required IconData icon,
+    required String label,
+    required Color color,
+    required VoidCallback onTap,
+  }) {
+    return GestureDetector(
+      onTap: onTap,
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          color: color.withOpacity(0.1),
+          borderRadius: BorderRadius.circular(12),
+          border: Border.all(color: color.withOpacity(0.3)),
+        ),
+        child: Column(
+          children: [
+            Icon(icon, color: color, size: 28),
+            const SizedBox(height: 8),
+            Text(
+              label,
+              style: TextStyle(color: color, fontWeight: FontWeight.w600),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  void _showPrivacyPolicy(BuildContext context) {
     _showInfoDialog(context, 'Kebijakan Privasi Warga App', '''
 **TERAKHIR DIPERBARUI: 12 Desember 2024**
 **VERSI: 3.0**
@@ -4743,8 +5049,8 @@ Untuk pertanyaan terkait Syarat dan Ketentuan ini, silakan hubungi:
 Versi: 2.0
 ''');
   }
-  
-// profile_screen.dart - UPDATE FUNGSI RATING SAJA
+
+  // profile_screen.dart - UPDATE FUNGSI RATING SAJA
 
   // Hapus semua kode EmailService import dan panggilan
   // Hanya gunakan mailto yang sudah terbukti berfungsi
@@ -5563,7 +5869,6 @@ Aplikasi: Warga App
     }
   }
 
-
   void _showInfoDialog(BuildContext context, String title, String content) {
     showDialog(
       context: context,
@@ -5653,11 +5958,7 @@ Aplikasi: Warga App
                       ),
                       child: Row(
                         children: [
-                          Icon(
-                            Icons.update,
-                            size: 14,
-                            color: Colors.blue,
-                          ),
+                          Icon(Icons.update, size: 14, color: Colors.blue),
                           const SizedBox(width: 6),
                           Text(
                             'Versi 3.0 • 12 Des 2024',

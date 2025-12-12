@@ -142,6 +142,71 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
     }
   }
 
+  // Fungsi untuk handle paste OTP
+  Future<void> _handlePaste(BuildContext context, int currentIndex) async {
+    final clipboardData = await Clipboard.getData(Clipboard.kTextPlain);
+    if (clipboardData?.text != null) {
+      String pastedText = clipboardData!.text!.trim();
+
+      // Hanya ambil angka dari text yang di-paste
+      pastedText = pastedText.replaceAll(RegExp(r'[^0-9]'), '');
+
+      print('📋 Pasted text: $pastedText');
+
+      if (pastedText.isEmpty) {
+        // Jika tidak ada angka yang valid
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Tidak ada kode OTP yang valid untuk ditempel'),
+            duration: Duration(seconds: 2),
+          ),
+        );
+        return;
+      }
+
+      // Hanya ambil maksimal 6 karakter pertama
+      if (pastedText.length > 6) {
+        pastedText = pastedText.substring(0, 6);
+      }
+
+      // Isi field OTP sesuai dengan text yang di-paste
+      for (int i = 0; i < pastedText.length; i++) {
+        final char = pastedText[i];
+        final targetIndex = currentIndex + i;
+
+        if (targetIndex < 6 && RegExp(r'^[0-9]$').hasMatch(char)) {
+          _otpControllers[targetIndex].text = char;
+          if (targetIndex < 5) {
+            _focusNodes[targetIndex + 1].requestFocus();
+          }
+        }
+      }
+
+      // Auto verify jika sudah 6 digit
+      if (_getOtpCode().length == 6) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          _verifyOtp();
+        });
+      }
+
+      // Clear error jika ada
+      if (_lastOtpError != null) {
+        setState(() {
+          _lastOtpError = null;
+        });
+      }
+
+      // Tampilkan feedback
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('OTP berhasil ditempel'),
+          duration: Duration(seconds: 2),
+          backgroundColor: Colors.green,
+        ),
+      );
+    }
+  }
+
   // screens/verify_otp_screen.dart - UPDATE bagian _verifyOtp
   Future<void> _verifyOtp() async {
     final otpCode = _getOtpCode();
@@ -484,13 +549,44 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
-                  Text(
-                    'Kode OTP',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                      color: Colors.grey.shade700,
-                    ),
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        'Kode OTP',
+                        style: TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.grey.shade700,
+                        ),
+                      ),
+                      // Paste button
+                      TextButton.icon(
+                        onPressed: () => _handlePaste(context, 0),
+                        icon: Icon(
+                          Icons.paste_rounded,
+                          color: Colors.blue.shade600,
+                          size: 16,
+                        ),
+                        label: Text(
+                          'Paste OTP',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: Colors.blue.shade600,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                        style: TextButton.styleFrom(
+                          padding: EdgeInsets.symmetric(
+                            horizontal: 8,
+                            vertical: 4,
+                          ),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                      ),
+                    ],
                   ),
                   const SizedBox(height: 12),
 
@@ -559,61 +655,74 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                           child: RawKeyboardListener(
                             focusNode: FocusNode(),
                             onKey: (event) => _handleKeyEvent(event, index),
-                            child: TextFormField(
-                              controller: _otpControllers[index],
-                              focusNode: _focusNodes[index],
-                              textAlign: TextAlign.center,
-                              keyboardType: TextInputType.number,
-                              maxLength: 1,
-                              decoration: InputDecoration(
-                                counterText: '',
-                                border: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                  borderSide: BorderSide.none,
-                                ),
-                                focusedBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                  borderSide: BorderSide(
-                                    color: hasError ? Colors.red : Colors.blue,
-                                    width: 2.5,
+                            child: GestureDetector(
+                              onLongPress: () async {
+                                // Enable long press untuk paste
+                                await _handlePaste(context, index);
+                              },
+                              child: TextFormField(
+                                controller: _otpControllers[index],
+                                focusNode: _focusNodes[index],
+                                textAlign: TextAlign.center,
+                                keyboardType: TextInputType.number,
+                                maxLength: 1,
+                                inputFormatters: [
+                                  FilteringTextInputFormatter.digitsOnly,
+                                ],
+                                decoration: InputDecoration(
+                                  counterText: '',
+                                  border: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                    borderSide: BorderSide.none,
+                                  ),
+                                  focusedBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                    borderSide: BorderSide(
+                                      color: hasError
+                                          ? Colors.red
+                                          : Colors.blue,
+                                      width: 2.5,
+                                    ),
+                                  ),
+                                  enabledBorder: OutlineInputBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                    borderSide: BorderSide(
+                                      color: hasError
+                                          ? Colors.red.shade300
+                                          : Colors.grey.shade300,
+                                      width: 1.5,
+                                    ),
+                                  ),
+                                  filled: true,
+                                  fillColor: hasError
+                                      ? Colors.red.shade50
+                                      : (isFocused
+                                            ? Colors.blue.shade50
+                                            : Colors.white),
+                                  contentPadding: EdgeInsets.zero,
+                                  hintText: '0',
+                                  hintStyle: TextStyle(
+                                    color: Colors.grey.shade400,
+                                    fontSize: 20,
+                                    fontWeight: FontWeight.bold,
                                   ),
                                 ),
-                                enabledBorder: OutlineInputBorder(
-                                  borderRadius: BorderRadius.circular(16),
-                                  borderSide: BorderSide(
-                                    color: hasError
-                                        ? Colors.red.shade300
-                                        : Colors.grey.shade300,
-                                    width: 1.5,
-                                  ),
-                                ),
-                                filled: true,
-                                fillColor: hasError
-                                    ? Colors.red.shade50
-                                    : (isFocused
-                                          ? Colors.blue.shade50
-                                          : Colors.white),
-                                contentPadding: EdgeInsets.zero,
-                                hintText: '0',
-                                hintStyle: TextStyle(
-                                  color: Colors.grey.shade400,
-                                  fontSize: 20,
+                                style: TextStyle(
+                                  fontSize: 22,
                                   fontWeight: FontWeight.bold,
+                                  color: hasError
+                                      ? Colors.red.shade800
+                                      : Colors.black87,
+                                  letterSpacing: 1.2,
                                 ),
+                                onChanged: (value) =>
+                                    _handleOtpChange(value, index),
+                                textInputAction: index == 5
+                                    ? TextInputAction.done
+                                    : TextInputAction.next,
+                                // Enable paste menu
+                                enableInteractiveSelection: true,
                               ),
-                              style: TextStyle(
-                                fontSize: 22,
-                                fontWeight: FontWeight.bold,
-                                color: hasError
-                                    ? Colors.red.shade800
-                                    : Colors.black87,
-                                letterSpacing: 1.2,
-                              ),
-                              onChanged: (value) =>
-                                  _handleOtpChange(value, index),
-                              textInputAction: index == 5
-                                  ? TextInputAction.done
-                                  : TextInputAction.next,
                             ),
                           ),
                         );
@@ -657,7 +766,7 @@ class _VerifyOtpScreenState extends State<VerifyOtpScreen> {
                           ),
                           const SizedBox(height: 4),
                           Text(
-                            '• Kode OTP akan kadaluarsa dalam $_countdown detik\n• Periksa folder spam jika tidak menemukan email\n• Kode akan terverifikasi otomatis ketika 6 digit terisi',
+                            '• Kode OTP akan kadaluarsa dalam $_countdown detik\n• Periksa folder spam jika tidak menemukan email\n• Kode akan terverifikasi otomatis ketika 6 digit terisi\n• Anda bisa paste OTP menggunakan tombol Paste OTP di atas',
                             style: TextStyle(
                               color: Colors.blue.shade700,
                               fontSize: 12,

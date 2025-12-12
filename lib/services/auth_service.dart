@@ -198,25 +198,31 @@ class AuthService {
           )
           .timeout(const Duration(seconds: 15));
 
+      final responseData = json.decode(response.body);
+
       if (response.statusCode.toString().startsWith('2')) {
-        final responseData = json.decode(response.body);
+        // Login berhasil
         final authResponse = _parseAuthResponse(responseData);
 
-        // Simpan token jika ada
         if (authResponse.accessToken != null) {
           await saveToken(authResponse.accessToken!);
         }
 
-        // Simpan user data
         if (authResponse.user != null) {
           await saveUser(authResponse.user!);
         }
 
         return authResponse;
       } else {
+        // Handle error khusus
         final errorData = json.decode(response.body);
         final errorMessage =
             errorData['message'] ?? 'Gagal login dengan Google';
+
+        if (errorMessage.contains('USER_NOT_REGISTERED')) {
+          throw Exception('USER_NOT_REGISTERED: Akun Google belum terdaftar');
+        }
+
         throw Exception(errorMessage);
       }
     } on http.ClientException {
