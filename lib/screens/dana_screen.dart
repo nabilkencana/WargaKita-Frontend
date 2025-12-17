@@ -284,18 +284,6 @@ class _DanaScreenState extends State<DanaScreen> with TickerProviderStateMixin {
                   horizontal: 12,
                   vertical: 6,
                 ),
-                decoration: BoxDecoration(
-                  color: Colors.white.withOpacity(0.2),
-                  borderRadius: BorderRadius.circular(20),
-                ),
-                child: Text(
-                  widget.user.role?.toUpperCase() ?? 'USER',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
               ),
             ],
           ),

@@ -318,7 +318,7 @@ Jika ada pertanyaan lebih lanjut, hubungi pelapor di:
       final userPhone = _currentUser.nomorTelepon ?? 'Tidak tersedia';
 
       // Nomor WhatsApp penerima (bisa disesuaikan)
-      final whatsappNumber = '+6281234567890'; // Ganti dengan nomor support
+      final whatsappNumber = '+6285648898807'; // Ganti dengan nomor support
 
       final message =
           '''
@@ -3225,7 +3225,7 @@ Mohon ditindaklanjuti.
                               'Hubungi customer service',
                               Colors.green.shade50,
                               Colors.green.shade600,
-                              () => _makePhoneCall("+623417890123"),
+                              () => _makePhoneCall("+6285648898807"),
                             ),
                           ),
                           const SizedBox(width: 12),
@@ -3399,19 +3399,19 @@ Mohon ditindaklanjuti.
                             _buildContactInfoRow(
                               Icons.phone,
                               'Customer Service',
-                              '(0341) 789-0123',
+                              '+62 856 4889 8807',
                               Colors.green.shade700,
                             ),
                             _buildContactInfoRow(
                               Icons.email,
                               'Email Support',
-                              'support@wargaapp.com',
+                              'nabilkencana20@gmail.com',
                               Colors.blue.shade700,
                             ),
                             _buildContactInfoRow(
                               Icons.chat_bubble,
                               'WhatsApp',
-                              '+62 812-3456-7890',
+                              '+62 856-4889-8807',
                               Colors.green.shade700,
                             ),
                             _buildContactInfoRow(
@@ -3729,7 +3729,7 @@ Mohon ditindaklanjuti.
             child: const Text('Tutup'),
           ),
           ElevatedButton(
-            onPressed: () => _makePhoneCall("+623417890123"),
+            onPressed: () => _makePhoneCall("+6285648898807"),
             child: const Text('Hubungi CS'),
           ),
         ],
@@ -3751,25 +3751,25 @@ Mohon ditindaklanjuti.
               _buildContactItem(
                 Icons.phone,
                 'Customer Service',
-                '(0341) 789-0123',
+                '+62 856 4889 8807',
                 Colors.green.shade700,
-                () => _makePhoneCall('+623417890123'),
+                () => _makePhoneCall('+6285648898807'),
               ),
               const SizedBox(height: 12),
               _buildContactItem(
                 Icons.email,
                 'Email Support',
-                'support@wargaapp.com',
+                'nabilkencana20@gmail.com',
                 Colors.blue.shade700,
-                () => _sendEmail('support@wargaapp.com'),
+                () => _sendEmail('nabilkencana20@gmail.com'),
               ),
               const SizedBox(height: 12),
               _buildContactItem(
                 Icons.chat_bubble,
                 'WhatsApp',
-                '+62 812-3456-7890',
+                '+62 856-4889-8807',
                 Colors.green.shade600,
-                () => _openWhatsApp('+6281234567890'),
+                () => _openWhatsApp('+6285648898807'),
               ),
               const SizedBox(height: 12),
               _buildContactItem(
@@ -4371,7 +4371,7 @@ Mohon ditindaklanjuti.
           ElevatedButton(
             onPressed: () {
               Navigator.pop(context);
-              _makePhoneCall("+623417890123");
+              _makePhoneCall("+6285648898807");
             },
             child: const Text('Telepon Sekarang'),
           ),
@@ -4383,50 +4383,45 @@ Mohon ditindaklanjuti.
   void _showReportProblemDialog(BuildContext context) {
     final problemController = TextEditingController();
     String selectedCategory = 'Umum';
-    bool _isSubmitting = false;
     String? selectedImagePath;
 
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (context) => StatefulBuilder(
-        builder: (context, setState) {
-          return Dialog(
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(20),
-            ),
-            child: Container(
-              constraints: BoxConstraints(
-                maxHeight: MediaQuery.of(context).size.height * 0.85,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return Container(
+              height: MediaQuery.of(context).size.height * 0.8,
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.only(
+                  topLeft: Radius.circular(24),
+                  topRight: Radius.circular(24),
+                ),
               ),
               child: Column(
-                mainAxisSize: MainAxisSize.min,
                 children: [
-                  // Header
+                  // Header SIMPLE
                   Container(
-                    padding: const EdgeInsets.all(24),
+                    padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
                       color: Colors.red.shade600,
                       borderRadius: const BorderRadius.only(
-                        topLeft: Radius.circular(20),
-                        topRight: Radius.circular(20),
+                        topLeft: Radius.circular(24),
+                        topRight: Radius.circular(24),
                       ),
                     ),
                     child: Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
                       children: [
-                        const Icon(
-                          Icons.bug_report,
-                          color: Colors.white,
-                          size: 28,
-                        ),
-                        const SizedBox(width: 12),
-                        const Expanded(
-                          child: Text(
-                            'Laporkan Masalah',
-                            style: TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
+                        const Text(
+                          'Laporkan Masalah',
+                          style: TextStyle(
+                            fontSize: 20,
+                            fontWeight: FontWeight.bold,
+                            color: Colors.white,
                           ),
                         ),
                         IconButton(
@@ -4437,13 +4432,15 @@ Mohon ditindaklanjuti.
                     ),
                   ),
 
-                  // Content
+                  // Content - SIMPLIFIED
                   Expanded(
                     child: SingleChildScrollView(
-                      padding: const EdgeInsets.all(24),
+                      physics: const BouncingScrollPhysics(),
+                      padding: const EdgeInsets.all(20),
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
+                          // Category Selection - SIMPLIFIED
                           const Text(
                             'Kategori Masalah',
                             style: TextStyle(
@@ -4451,32 +4448,25 @@ Mohon ditindaklanjuti.
                               fontSize: 16,
                             ),
                           ),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 12),
                           Wrap(
                             spacing: 8,
                             runSpacing: 8,
-                            children:
-                                [
-                                  'Umum',
-                                  'Teknis',
-                                  'Akun',
-                                  'Dokumen',
-                                  'Notifikasi',
-                                  'Lainnya',
-                                ].map((category) {
-                                  return ChoiceChip(
-                                    label: Text(category),
-                                    selected: selectedCategory == category,
-                                    onSelected: (selected) {
-                                      setState(
-                                        () => selectedCategory = category,
-                                      );
-                                    },
-                                  );
-                                }).toList(),
+                            children: ['Umum', 'Teknis', 'Akun', 'Dokumen'].map(
+                              (category) {
+                                return ChoiceChip(
+                                  label: Text(category),
+                                  selected: selectedCategory == category,
+                                  onSelected: (selected) {
+                                    setState(() => selectedCategory = category);
+                                  },
+                                );
+                              },
+                            ).toList(),
                           ),
                           const SizedBox(height: 24),
 
+                          // Description - SIMPLIFIED
                           const Text(
                             'Deskripsi Masalah',
                             style: TextStyle(
@@ -4484,180 +4474,92 @@ Mohon ditindaklanjuti.
                               fontSize: 16,
                             ),
                           ),
-                          const SizedBox(height: 8),
+                          const SizedBox(height: 12),
                           TextField(
                             controller: problemController,
-                            maxLines: 5,
+                            maxLines: 4,
                             decoration: InputDecoration(
-                              hintText:
-                                  'Jelaskan masalah yang Anda alami secara detail...',
+                              hintText: 'Jelaskan masalah yang Anda alami...',
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
                               ),
                             ),
                           ),
-                          const SizedBox(height: 8),
-                          Text(
-                            'Sertakan: perangkat, langkah reproduksi, waktu kejadian',
-                            style: TextStyle(
-                              fontSize: 12,
-                              color: Colors.grey.shade600,
-                            ),
-                          ),
-
                           const SizedBox(height: 24),
 
-                          // Screenshot Section
-                          Container(
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Colors.blue.shade50,
-                              borderRadius: BorderRadius.circular(12),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  '📸 Screenshot (Opsional)',
-                                  style: TextStyle(fontWeight: FontWeight.w600),
-                                ),
-                                const SizedBox(height: 8),
+                          // Screenshot - OPTIONAL (bisa di-skip jika masih lag)
+                          GestureDetector(
+                            onTap: () async {
+                              final picker = ImagePicker();
+                              final pickedFile = await picker.pickImage(
+                                source: ImageSource.gallery,
+                                maxWidth: 800,
+                                maxHeight: 800,
+                                imageQuality: 85,
+                              );
 
-                                if (selectedImagePath != null)
-                                  Container(
-                                    margin: const EdgeInsets.only(bottom: 12),
-                                    child: Stack(
+                              if (pickedFile != null) {
+                                setState(
+                                  () => selectedImagePath = pickedFile.path,
+                                );
+                              }
+                            },
+                            child: Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.blue.shade50,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(color: Colors.blue.shade100),
+                              ),
+                              child: Row(
+                                children: [
+                                  Icon(
+                                    Icons.photo,
+                                    color: Colors.blue.shade600,
+                                    size: 24,
+                                  ),
+                                  const SizedBox(width: 12),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
                                       children: [
-                                        ClipRRect(
-                                          borderRadius: BorderRadius.circular(
-                                            8,
-                                          ),
-                                          child: Image.file(
-                                            File(selectedImagePath!),
-                                            height: 100,
-                                            fit: BoxFit.cover,
+                                        Text(
+                                          selectedImagePath != null
+                                              ? 'Screenshot terpilih'
+                                              : 'Tambahkan Screenshot (Opsional)',
+                                          style: TextStyle(
+                                            color: Colors.blue.shade800,
+                                            fontWeight: FontWeight.w500,
                                           ),
                                         ),
-                                        Positioned(
-                                          top: 4,
-                                          right: 4,
-                                          child: GestureDetector(
-                                            onTap: () {
-                                              setState(
-                                                () => selectedImagePath = null,
-                                              );
-                                            },
-                                            child: Container(
-                                              padding: const EdgeInsets.all(4),
-                                              decoration: BoxDecoration(
-                                                color: Colors.black.withOpacity(
-                                                  0.6,
-                                                ),
-                                                shape: BoxShape.circle,
-                                              ),
-                                              child: const Icon(
-                                                Icons.close,
-                                                color: Colors.white,
-                                                size: 16,
-                                              ),
+                                        if (selectedImagePath != null)
+                                          Text(
+                                            'Tap untuk mengganti',
+                                            style: TextStyle(
+                                              color: Colors.blue.shade600,
+                                              fontSize: 12,
                                             ),
                                           ),
-                                        ),
                                       ],
                                     ),
                                   ),
-
-                                Row(
-                                  children: [
-                                    ElevatedButton.icon(
-                                      onPressed: () async {
-                                        final picker = ImagePicker();
-                                        final pickedFile = await picker
-                                            .pickImage(
-                                              source: ImageSource.gallery,
-                                              maxWidth: 800,
-                                              maxHeight: 800,
-                                              imageQuality: 85,
-                                            );
-
-                                        if (pickedFile != null) {
-                                          setState(
-                                            () => selectedImagePath =
-                                                pickedFile.path,
-                                          );
-                                        }
+                                  if (selectedImagePath != null)
+                                    IconButton(
+                                      icon: const Icon(Icons.close, size: 18),
+                                      onPressed: () {
+                                        setState(
+                                          () => selectedImagePath = null,
+                                        );
                                       },
-                                      icon: const Icon(Icons.photo, size: 18),
-                                      label: const Text('Pilih Gambar'),
-                                      style: ElevatedButton.styleFrom(
-                                        backgroundColor: Colors.white,
-                                        foregroundColor: Colors.blue.shade700,
-                                      ),
                                     ),
-                                    const SizedBox(width: 8),
-                                    if (selectedImagePath == null)
-                                      ElevatedButton.icon(
-                                        onPressed: () async {
-                                          // Implement screenshot capture
-                                          _showSuccessSnackbar(
-                                            'Fitur screenshot akan datang',
-                                          );
-                                        },
-                                        icon: const Icon(
-                                          Icons.screenshot,
-                                          size: 18,
-                                        ),
-                                        label: const Text('Ambil Screenshot'),
-                                        style: ElevatedButton.styleFrom(
-                                          backgroundColor: Colors.white,
-                                          foregroundColor:
-                                              Colors.green.shade700,
-                                        ),
-                                      ),
-                                  ],
-                                ),
-                                const SizedBox(height: 8),
-                                Text(
-                                  'Gambar membantu kami memahami masalah lebih cepat',
-                                  style: TextStyle(
-                                    fontSize: 12,
-                                    color: Colors.grey.shade600,
-                                  ),
-                                ),
-                              ],
+                                ],
+                              ),
                             ),
                           ),
-
                           const SizedBox(height: 24),
 
-                          // System Info
-                          Container(
-                            padding: const EdgeInsets.all(12),
-                            decoration: BoxDecoration(
-                              color: Colors.grey.shade100,
-                              borderRadius: BorderRadius.circular(8),
-                            ),
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                const Text(
-                                  'ℹ️ Informasi Sistem',
-                                  style: TextStyle(fontWeight: FontWeight.w600),
-                                ),
-                                const SizedBox(height: 4),
-                                Text('Aplikasi: Warga App v1.0.0'),
-                                Text('Perangkat: ${Platform.operatingSystem}'),
-                                Text('Tanggal: ${DateTime.now().toLocal()}'),
-                                Text(
-                                  'Pengguna: ${_currentUser.namaLengkap ?? 'N/A'}',
-                                ),
-                              ],
-                            ),
-                          ),
-
-                          const SizedBox(height: 16),
-
-                          // Pilihan Pengiriman
+                          // Delivery Method - SIMPLIFIED
                           Container(
                             padding: const EdgeInsets.all(16),
                             decoration: BoxDecoration(
@@ -4668,21 +4570,15 @@ Mohon ditindaklanjuti.
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
                                 const Text(
-                                  '📤 Pilih Metode Pengiriman',
-                                  style: TextStyle(
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.black87,
-                                  ),
+                                  'Pilih Metode Pengiriman',
+                                  style: TextStyle(fontWeight: FontWeight.w600),
                                 ),
-                                const SizedBox(height: 12),
+                                const SizedBox(height: 16),
                                 Row(
                                   children: [
                                     Expanded(
-                                      child: _buildDeliveryOption(
-                                        icon: Icons.email,
-                                        label: 'Email',
-                                        color: Colors.blue.shade600,
-                                        onTap: () async {
+                                      child: ElevatedButton.icon(
+                                        onPressed: () async {
                                           await _sendReportViaEmail(
                                             category: selectedCategory,
                                             description: problemController.text,
@@ -4690,21 +4586,29 @@ Mohon ditindaklanjuti.
                                           );
                                           if (mounted) Navigator.pop(context);
                                         },
+                                        icon: const Icon(Icons.email, size: 18),
+                                        label: const Text('Email'),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor: Colors.blue.shade600,
+                                        ),
                                       ),
                                     ),
                                     const SizedBox(width: 12),
                                     Expanded(
-                                      child: _buildDeliveryOption(
-                                        icon: Icons.chat,
-                                        label: 'WhatsApp',
-                                        color: Colors.green.shade600,
-                                        onTap: () async {
+                                      child: ElevatedButton.icon(
+                                        onPressed: () async {
                                           await _sendReportViaWhatsApp(
                                             category: selectedCategory,
                                             description: problemController.text,
                                           );
                                           if (mounted) Navigator.pop(context);
                                         },
+                                        icon: const Icon(Icons.chat, size: 18),
+                                        label: const Text('WhatsApp'),
+                                        style: ElevatedButton.styleFrom(
+                                          backgroundColor:
+                                              Colors.green.shade600,
+                                        ),
                                       ),
                                     ),
                                   ],
@@ -4712,12 +4616,13 @@ Mohon ditindaklanjuti.
                               ],
                             ),
                           ),
+                          const SizedBox(height: 20),
                         ],
                       ),
                     ),
                   ),
 
-                  // Footer
+                  // Footer - SIMPLIFIED
                   Container(
                     padding: const EdgeInsets.all(20),
                     decoration: BoxDecoration(
@@ -4725,96 +4630,63 @@ Mohon ditindaklanjuti.
                         top: BorderSide(color: Colors.grey.shade200),
                       ),
                     ),
-                    child: _isSubmitting
-                        ? const CircularProgressIndicator()
-                        : Row(
-                            children: [
-                              Expanded(
-                                child: OutlinedButton(
-                                  onPressed: () => Navigator.pop(context),
-                                  child: const Text('Batal'),
-                                ),
-                              ),
-                              const SizedBox(width: 12),
-                              Expanded(
-                                child: ElevatedButton(
-                                  onPressed: () async {
-                                    if (problemController.text.isEmpty) {
-                                      _showErrorSnackbar(
-                                        'Harap isi deskripsi masalah',
-                                      );
-                                      return;
-                                    }
-
-                                    setState(() => _isSubmitting = true);
-
-                                    // Tampilkan pilihan pengiriman
-                                    final method =
-                                        await _showDeliveryMethodDialog(
-                                          context,
-                                        );
-
-                                    if (method == 'email') {
-                                      await _sendReportViaEmail(
-                                        category: selectedCategory,
-                                        description: problemController.text,
-                                        imagePath: selectedImagePath,
-                                      );
-                                    } else if (method == 'whatsapp') {
-                                      await _sendReportViaWhatsApp(
-                                        category: selectedCategory,
-                                        description: problemController.text,
-                                      );
-                                    }
-
-                                    if (mounted) Navigator.pop(context);
-                                  },
-                                  style: ElevatedButton.styleFrom(
-                                    backgroundColor: Colors.red.shade600,
-                                  ),
-                                  child: const Text('Laporkan Sekarang'),
-                                ),
-                              ),
-                            ],
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.pop(context),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                            child: const Text('Batal'),
                           ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: () {
+                              if (problemController.text.isEmpty) {
+                                _showErrorSnackbar(
+                                  'Harap isi deskripsi masalah',
+                                );
+                                return;
+                              }
+                              Navigator.pop(context);
+                              // Buka dialog pilihan
+                              _showDeliveryMethodDialog(context).then((method) {
+                                if (method == 'email') {
+                                  _sendReportViaEmail(
+                                    category: selectedCategory,
+                                    description: problemController.text,
+                                    imagePath: selectedImagePath,
+                                  );
+                                } else if (method == 'whatsapp') {
+                                  _sendReportViaWhatsApp(
+                                    category: selectedCategory,
+                                    description: problemController.text,
+                                  );
+                                }
+                              });
+                            },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red.shade600,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                            ),
+                            child: const Text('Laporkan'),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
-            ),
-          );
-        },
-      ),
+            );
+          },
+        );
+      },
     );
   }
 
-  Widget _buildDeliveryOption({
-    required IconData icon,
-    required String label,
-    required Color color,
-    required VoidCallback onTap,
-  }) {
-    return GestureDetector(
-      onTap: onTap,
-      child: Container(
-        padding: const EdgeInsets.all(16),
-        decoration: BoxDecoration(
-          color: color.withOpacity(0.1),
-          borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: color.withOpacity(0.3)),
-        ),
-        child: Column(
-          children: [
-            Icon(icon, color: color, size: 28),
-            const SizedBox(height: 8),
-            Text(
-              label,
-              style: TextStyle(color: color, fontWeight: FontWeight.w600),
-            ),
-          ],
-        ),
-      ),
-    );
-  }
 
   void _showPrivacyPolicy(BuildContext context) {
     _showInfoDialog(context, 'Kebijakan Privasi Warga App', '''
@@ -5050,10 +4922,6 @@ Versi: 2.0
 ''');
   }
 
-  // profile_screen.dart - UPDATE FUNGSI RATING SAJA
-
-  // Hapus semua kode EmailService import dan panggilan
-  // Hanya gunakan mailto yang sudah terbukti berfungsi
 
   void _showRatingDialog(BuildContext context) {
     int selectedRating = 0;
@@ -5068,19 +4936,24 @@ Versi: 2.0
           builder: (context, setState) {
             return Dialog(
               shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(24),
+                borderRadius: BorderRadius.circular(
+                  20,
+                ), // Kurangi border radius
               ),
-              insetPadding: const EdgeInsets.symmetric(horizontal: 20),
+              insetPadding: const EdgeInsets.symmetric(
+                horizontal: 16,
+              ), // Kurangi padding
               child: Container(
                 constraints: BoxConstraints(
-                  maxHeight: MediaQuery.of(context).size.height * 0.85,
+                  maxHeight: MediaQuery.of(context).size.height * 0.8,
+                  maxWidth: 400, // Batasi lebar maksimum
                 ),
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    // Header
+                    // Header - DIKECILKAN
                     Container(
-                      padding: const EdgeInsets.all(24),
+                      padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: [
@@ -5091,8 +4964,8 @@ Versi: 2.0
                           end: Alignment.bottomRight,
                         ),
                         borderRadius: const BorderRadius.only(
-                          topLeft: Radius.circular(24),
-                          topRight: Radius.circular(24),
+                          topLeft: Radius.circular(20),
+                          topRight: Radius.circular(20),
                         ),
                       ),
                       child: Row(
@@ -5106,15 +4979,15 @@ Versi: 2.0
                             child: const Icon(
                               Icons.star_rounded,
                               color: Colors.white,
-                              size: 28,
+                              size: 24, // Kecilkan icon
                             ),
                           ),
                           const SizedBox(width: 12),
                           const Expanded(
                             child: Text(
-                              'Beri Rating Aplikasi',
+                              'Beri Rating',
                               style: TextStyle(
-                                fontSize: 20,
+                                fontSize: 18, // Kecilkan font
                                 fontWeight: FontWeight.bold,
                                 color: Colors.white,
                               ),
@@ -5124,7 +4997,7 @@ Versi: 2.0
                             icon: const Icon(
                               Icons.close,
                               color: Colors.white,
-                              size: 24,
+                              size: 20, // Kecilkan icon
                             ),
                             onPressed: _isSubmitting
                                 ? null
@@ -5137,18 +5010,18 @@ Versi: 2.0
                     // Content
                     Expanded(
                       child: SingleChildScrollView(
-                        padding: const EdgeInsets.all(24),
+                        padding: const EdgeInsets.all(20),
                         child: Column(
                           children: [
-                            // Avatar user
+                            // Avatar - DIKECILKAN
                             Container(
-                              margin: const EdgeInsets.only(bottom: 20),
+                              margin: const EdgeInsets.only(bottom: 16),
                               child: CircleAvatar(
-                                radius: 40,
+                                radius: 32, // Kecilkan radius
                                 backgroundColor: Colors.amber.shade100,
                                 child: Icon(
                                   Icons.person,
-                                  size: 40,
+                                  size: 32, // Kecilkan icon
                                   color: Colors.amber.shade800,
                                 ),
                               ),
@@ -5158,7 +5031,7 @@ Versi: 2.0
                             const Text(
                               'Bagaimana pengalaman Anda?',
                               style: TextStyle(
-                                fontSize: 22,
+                                fontSize: 18, // Kecilkan font
                                 fontWeight: FontWeight.bold,
                                 color: Colors.black87,
                               ),
@@ -5166,31 +5039,26 @@ Versi: 2.0
                             ),
                             const SizedBox(height: 8),
 
-                            // Subtitle - PERBAIKI TEKS INI
-                            Text(
-                              'Rating Anda akan membuka aplikasi email untuk dikirim ke developer',
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.grey.shade600,
-                                height: 1.5,
+                            // Subtitle
+                            Padding(
+                              padding: const EdgeInsets.symmetric(
+                                horizontal: 16,
                               ),
-                              textAlign: TextAlign.center,
-                            ),
-                            const SizedBox(height: 32),
-
-                            // Emoji
-                            if (selectedRating > 0)
-                              Container(
-                                margin: const EdgeInsets.only(bottom: 16),
-                                child: Text(
-                                  _getEmojiForRating(selectedRating),
-                                  style: const TextStyle(fontSize: 48),
+                              child: Text(
+                                'Rating Anda akan membuka aplikasi email untuk dikirim ke developer',
+                                style: TextStyle(
+                                  fontSize: 13, // Kecilkan font
+                                  color: Colors.grey.shade600,
+                                  height: 1.4,
                                 ),
+                                textAlign: TextAlign.center,
                               ),
+                            ),
+                            const SizedBox(height: 24),
 
-                            // Bintang dengan outline
+                            // Bintang - DIKECILKAN
                             Container(
-                              margin: const EdgeInsets.symmetric(vertical: 16),
+                              margin: const EdgeInsets.symmetric(vertical: 12),
                               child: Row(
                                 mainAxisAlignment: MainAxisAlignment.center,
                                 children: List.generate(5, (index) {
@@ -5205,28 +5073,16 @@ Versi: 2.0
                                     },
                                     child: Container(
                                       margin: const EdgeInsets.symmetric(
-                                        horizontal: 8,
+                                        horizontal: 6, // Kurangi margin
                                       ),
-                                      child: AnimatedContainer(
-                                        duration: const Duration(
-                                          milliseconds: 300,
-                                        ),
-                                        curve: Curves.elasticOut,
-                                        transform: isFilled
-                                            ? Matrix4.identity().scaled(
-                                                1.15,
-                                                1.15,
-                                              )
-                                            : Matrix4.identity(),
-                                        child: Icon(
-                                          isFilled
-                                              ? Icons.star_rounded
-                                              : Icons.star_border_rounded,
-                                          color: isFilled
-                                              ? Colors.amber.shade500
-                                              : Colors.grey.shade400,
-                                          size: 52,
-                                        ),
+                                      child: Icon(
+                                        isFilled
+                                            ? Icons.star_rounded
+                                            : Icons.star_border_rounded,
+                                        color: isFilled
+                                            ? Colors.amber.shade500
+                                            : Colors.grey.shade400,
+                                        size: 40, // Kecilkan ukuran bintang
                                       ),
                                     ),
                                   );
@@ -5238,74 +5094,66 @@ Versi: 2.0
                             Text(
                               _getRatingLabel(selectedRating),
                               style: TextStyle(
-                                fontSize: 18,
+                                fontSize: 16, // Kecilkan font
                                 fontWeight: FontWeight.w600,
                                 color: selectedRating > 0
                                     ? _getRatingColor(selectedRating)
                                     : Colors.grey.shade500,
                               ),
                             ),
-                            const SizedBox(height: 8),
+                            const SizedBox(height: 6),
 
                             Text(
                               '$selectedRating/5 Bintang',
                               style: TextStyle(
-                                fontSize: 14,
+                                fontSize: 13, // Kecilkan font
                                 color: Colors.grey.shade600,
                               ),
                             ),
 
-                            const SizedBox(height: 32),
+                            const SizedBox(height: 24),
 
                             // Komentar
                             Container(
-                              padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
-                                vertical: 20,
-                              ),
+                              padding: const EdgeInsets.all(16),
                               decoration: BoxDecoration(
                                 color: Colors.grey.shade50,
-                                borderRadius: BorderRadius.circular(16),
+                                borderRadius: BorderRadius.circular(12),
                                 border: Border.all(color: Colors.grey.shade200),
                               ),
                               child: Column(
                                 crossAxisAlignment: CrossAxisAlignment.start,
                                 children: [
-                                  Row(
-                                    children: [
-                                      Icon(
-                                        Icons.message,
-                                        color: Colors.blue.shade600,
-                                        size: 20,
-                                      ),
-                                      const SizedBox(width: 8),
-                                      Text(
-                                        'Komentar (Opsional)',
-                                        style: TextStyle(
-                                          fontSize: 16,
-                                          fontWeight: FontWeight.w600,
-                                          color: Colors.blue.shade800,
-                                        ),
-                                      ),
-                                    ],
+                                  Text(
+                                    'Komentar (Opsional)',
+                                    style: TextStyle(
+                                      fontSize: 15, // Kecilkan font
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.blue.shade800,
+                                    ),
                                   ),
-                                  const SizedBox(height: 12),
+                                  const SizedBox(height: 10),
                                   TextField(
                                     controller: commentController,
-                                    maxLines: 4,
-                                    maxLength: 300,
+                                    maxLines: 3, // Kurangi max lines
+                                    maxLength: 200, // Kurangi max length
                                     decoration: InputDecoration(
                                       hintText:
                                           'Apa yang bisa kami perbaiki? Fitur apa yang Anda suka?',
                                       hintStyle: TextStyle(
                                         color: Colors.grey.shade400,
-                                        fontSize: 14,
+                                        fontSize: 13, // Kecilkan font
                                       ),
-                                      border: InputBorder.none,
-                                      contentPadding: EdgeInsets.zero,
+                                      border: OutlineInputBorder(
+                                        borderRadius: BorderRadius.circular(8),
+                                        borderSide: BorderSide(
+                                          color: Colors.grey.shade300,
+                                        ),
+                                      ),
+                                      contentPadding: const EdgeInsets.all(12),
                                     ),
                                     style: TextStyle(
-                                      fontSize: 14,
+                                      fontSize: 13, // Kecilkan font
                                       color: Colors.grey.shade800,
                                     ),
                                   ),
@@ -5313,24 +5161,24 @@ Versi: 2.0
                               ),
                             ),
 
-                            const SizedBox(height: 20),
+                            const SizedBox(height: 16),
 
-                            // Informasi pengiriman - PERBAIKI INI
+                            // Informasi pengiriman
                             Container(
-                              padding: const EdgeInsets.all(16),
+                              padding: const EdgeInsets.all(12),
                               decoration: BoxDecoration(
                                 color: Colors.blue.shade50,
-                                borderRadius: BorderRadius.circular(12),
+                                borderRadius: BorderRadius.circular(10),
                                 border: Border.all(color: Colors.blue.shade100),
                               ),
                               child: Row(
                                 children: [
                                   Icon(
-                                    Icons.email_outlined,
+                                    Icons.info_outline,
                                     color: Colors.blue.shade600,
-                                    size: 20,
+                                    size: 18, // Kecilkan icon
                                   ),
-                                  const SizedBox(width: 12),
+                                  const SizedBox(width: 10),
                                   Expanded(
                                     child: Column(
                                       crossAxisAlignment:
@@ -5341,23 +5189,15 @@ Versi: 2.0
                                           style: TextStyle(
                                             color: Colors.blue.shade800,
                                             fontWeight: FontWeight.w500,
+                                            fontSize: 13, // Kecilkan font
                                           ),
                                         ),
-                                        const SizedBox(height: 4),
-                                        Text(
-                                          'Klik "Kirim" untuk membuka email',
-                                          style: TextStyle(
-                                            color: Colors.blue.shade600,
-                                            fontSize: 12,
-                                          ),
-                                        ),
-                                        const SizedBox(height: 4),
+                                        const SizedBox(height: 2),
                                         Text(
                                           'Tujuan: Email developer Warga App',
                                           style: TextStyle(
                                             color: Colors.blue.shade700,
-                                            fontSize: 12,
-                                            fontWeight: FontWeight.w500,
+                                            fontSize: 11, // Kecilkan font
                                           ),
                                         ),
                                       ],
@@ -5371,29 +5211,22 @@ Versi: 2.0
                       ),
                     ),
 
-                    // Footer
+                    // Footer - TOMBOL LEBIH RINGKAS
                     Container(
-                      padding: const EdgeInsets.all(24),
+                      padding: const EdgeInsets.all(20),
                       decoration: BoxDecoration(
                         color: Colors.white,
                         border: Border(
                           top: BorderSide(color: Colors.grey.shade200),
                         ),
                         borderRadius: const BorderRadius.only(
-                          bottomLeft: Radius.circular(24),
-                          bottomRight: Radius.circular(24),
+                          bottomLeft: Radius.circular(20),
+                          bottomRight: Radius.circular(20),
                         ),
-                        boxShadow: [
-                          BoxShadow(
-                            color: Colors.grey.shade200.withOpacity(0.5),
-                            blurRadius: 10,
-                            offset: const Offset(0, -4),
-                          ),
-                        ],
                       ),
                       child: Column(
                         children: [
-                          // Tombol Kirim - LANGSUNG MAILTO
+                          // Tombol Kirim - TEKS LEBIH PENDEK
                           SizedBox(
                             width: double.infinity,
                             child: ElevatedButton(
@@ -5401,15 +5234,12 @@ Versi: 2.0
                                   ? null
                                   : () async {
                                       setState(() => _isSubmitting = true);
-
                                       try {
-                                        // LANGSUNG kirim via mailto
                                         final success =
                                             await _sendRatingViaMailTo(
                                               rating: selectedRating,
                                               comment: commentController.text,
                                             );
-
                                         if (mounted) {
                                           Navigator.pop(context);
                                           if (success) {
@@ -5446,83 +5276,39 @@ Versi: 2.0
                                     : Colors.grey.shade300,
                                 foregroundColor: Colors.white,
                                 padding: const EdgeInsets.symmetric(
-                                  vertical: 18,
-                                ),
+                                  vertical: 14,
+                                ), // Kurangi padding
                                 shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
+                                  borderRadius: BorderRadius.circular(12),
                                 ),
-                                elevation: 3,
-                                shadowColor: Colors.amber.shade200,
                               ),
                               child: _isSubmitting
-                                  ? Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        SizedBox(
-                                          width: 22,
-                                          height: 22,
-                                          child: CircularProgressIndicator(
-                                            strokeWidth: 2.5,
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                        const SizedBox(width: 12),
-                                        const Text(
-                                          'Membuka Email...',
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                        ),
-                                      ],
-                                    )
-                                  : Row(
-                                      mainAxisAlignment:
-                                          MainAxisAlignment.center,
-                                      children: [
-                                        Icon(Icons.email_rounded, size: 22),
-                                        const SizedBox(width: 10),
-                                        Text(
-                                          'BUKA APLIKASI EMAIL',
-                                          style: TextStyle(
-                                            fontSize: 16,
-                                            fontWeight: FontWeight.w600,
-                                            letterSpacing: 0.5,
-                                          ),
-                                        ),
-                                      ],
-                                    ),
+                                  ? const Text('Memproses...')
+                                  : const Text(
+                                      'KIRIM RATING',
+                                    ), // TEKS LEBIH PENDEK
                             ),
                           ),
 
-                          const SizedBox(height: 16),
+                          const SizedBox(height: 12),
 
                           // Tombol Batal
                           SizedBox(
                             width: double.infinity,
-                            child: OutlinedButton(
+                            child: TextButton(
                               onPressed: _isSubmitting
                                   ? null
                                   : () => Navigator.pop(context),
-                              style: OutlinedButton.styleFrom(
+                              style: TextButton.styleFrom(
                                 padding: const EdgeInsets.symmetric(
-                                  vertical: 16,
-                                ),
-                                side: BorderSide(
-                                  color: Colors.grey.shade300,
-                                  width: 1.5,
-                                ),
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(16),
+                                  vertical: 12,
                                 ),
                               ),
                               child: Text(
                                 'Nanti Saja',
                                 style: TextStyle(
-                                  color: Colors.grey.shade700,
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.w500,
+                                  color: Colors.grey.shade600,
+                                  fontSize: 14,
                                 ),
                               ),
                             ),
@@ -5832,23 +5618,6 @@ Aplikasi: Warga App
         return 'Luar Biasa!';
       default:
         return 'Tap bintang untuk memberi rating';
-    }
-  }
-
-  String _getEmojiForRating(int rating) {
-    switch (rating) {
-      case 1:
-        return '😞';
-      case 2:
-        return '😕';
-      case 3:
-        return '😐';
-      case 4:
-        return '😊';
-      case 5:
-        return '🤩';
-      default:
-        return '⭐';
     }
   }
 

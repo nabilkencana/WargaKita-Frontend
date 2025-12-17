@@ -90,7 +90,7 @@ class _MyAppState extends State<MyApp> {
       debugShowCheckedModeBanner: false,
       home: _isLoggedIn && _currentUser != null
           ? HomeScreen(user: _currentUser!)
-          : const SplashToLoginScreen(),
+          : const SplashScreen(),
       routes: _buildRoutes(),
       onGenerateRoute: _onGenerateRoute,
       builder: _appBuilder,
@@ -547,9 +547,9 @@ class _MyAppState extends State<MyApp> {
         if (_currentUser != null) {
           return HomeScreen(user: _currentUser!);
         }
-        return const SplashToLoginScreen();
+        return const SplashScreen();
       },
-      '/splash': (context) => const SplashToLoginScreen(),
+      '/splash': (context) => const SplashScreen(),
     };
   }
 
@@ -574,7 +574,7 @@ class _MyAppState extends State<MyApp> {
 
       default:
         return MaterialPageRoute(
-          builder: (context) => const SplashToLoginScreen(),
+          builder: (context) => const SplashScreen(),
           settings: settings,
         );
     }

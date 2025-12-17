@@ -1,16 +1,11 @@
-import 'package:connectivity_plus/connectivity_plus.dart';
-import 'package:device_info_plus/device_info_plus.dart';
 import 'package:flutter/material.dart';
-import 'package:url_launcher/url_launcher.dart';
-import 'package:warga_app/models/user_model.dart';
 import 'package:warga_app/screens/register_screen.dart';
-import 'package:warga_app/screens/home_screen.dart';
 import '../services/auth_service.dart';
 
 class LoginScreen extends StatefulWidget {
-   final String? prefilledEmail; // 🎯 Parameter baru
+  final String? prefilledEmail;
 
-  const LoginScreen({super.key, this.prefilledEmail}); // 🎯 Constructor update
+  const LoginScreen({super.key, this.prefilledEmail});
 
   @override
   _LoginScreenState createState() => _LoginScreenState();
@@ -23,7 +18,6 @@ class _LoginScreenState extends State<LoginScreen>
   final FocusNode _emailFocusNode = FocusNode();
 
   bool _isLoading = false;
-  bool _isGoogleLoading = false;
   bool _rememberMe = false;
   bool _isEmailValid = false;
   bool _showEmailHint = true;
@@ -44,16 +38,13 @@ class _LoginScreenState extends State<LoginScreen>
   void initState() {
     super.initState();
     _initializeAnimations();
-    _checkExistingGoogleUser();
     _setupEmailListener();
-    _prefillEmail(); // 🎯 Prefill email dari register
+    _prefillEmail();
   }
 
-   // 🎯 METHOD BARU: Prefill email jika ada dari register screen
   void _prefillEmail() {
     if (widget.prefilledEmail != null && widget.prefilledEmail!.isNotEmpty) {
       _emailController.text = widget.prefilledEmail!;
-      // Trigger validation after setting text
       final email = _emailController.text.trim();
       final isValid = _validateEmailFormat(email);
 
@@ -92,7 +83,6 @@ class _LoginScreenState extends State<LoginScreen>
     _controller.forward();
   }
 
-  // Update _setupEmailListener untuk handle prefill
   void _setupEmailListener() {
     _emailController.addListener(() {
       final email = _emailController.text.trim();
@@ -109,17 +99,6 @@ class _LoginScreenState extends State<LoginScreen>
     if (email.isEmpty) return false;
     final emailRegex = RegExp(r'^[\w\.-]+@gmail\.com$');
     return emailRegex.hasMatch(email);
-  }
-
-  Future<void> _checkExistingGoogleUser() async {
-    try {
-      final currentUser = await _authService.getCurrentGoogleUser();
-      if (currentUser != null) {
-        print('🔍 Found existing Google user: ${currentUser.email}');
-      }
-    } catch (e) {
-      print('⚠️ Error checking existing Google user: $e');
-    }
   }
 
   Future<void> _sendOtp() async {
@@ -175,287 +154,12 @@ class _LoginScreenState extends State<LoginScreen>
     }
   }
 
-Future<void> _signInWithGoogle() async {
-    // Debug info
-    print('🔄 Starting Google Sign In process...');
-
-    setState(() => _isGoogleLoading = true);
-
-    try {
-      // 1. Cek koneksi internet
-      print('📡 Checking internet connection...');
-      final connectivityResult = await Connectivity().checkConnectivity();
-      if (connectivityResult == ConnectivityResult.none) {
-        _showError(
-          'Tidak ada koneksi internet. Periksa WiFi/mobile data Anda.',
-        );
-        setState(() => _isGoogleLoading = false);
-        return;
-      }
-      print('✅ Internet connection OK');
-
-      // 2. Cek device info
-      print('📱 Checking device info...');
-      final deviceInfo = DeviceInfoPlugin();
-      final androidInfo = await deviceInfo.androidInfo;
-
-      print('📱 Device Details:');
-      print('   Brand: ${androidInfo.brand}');
-      print('   Model: ${androidInfo.model}');
-      print('   Android: ${androidInfo.version.release}');
-      print('   Is Physical: ${androidInfo.isPhysicalDevice}');
-
-      // 3. Direct attempt to Google Sign In
-      print('🔐 Attempting Google Sign In...');
-      final AuthResponse result = await _authService.signInWithGoogle();
-
-      print('✅ Google Sign In successful!');
-
-      if (result.user != null) {
-        _showSuccess('Login dengan Google berhasil!');
-        _saveAuthData(result);
-        _navigateToHome(result);
-      } else {
-        throw Exception('User data tidak ditemukan dari backend');
-      }
-    } catch (e) {
-      print('❌ Google Sign In Error: $e');
-      print('❌ Error type: ${e.runtimeType}');
-      print('❌ Error toString: ${e.toString()}');
-
-      // Improved error handling
-      String errorStr = e.toString();
-
-      if (errorStr.contains('sign_in_failed') ||
-          errorStr.contains('SIGN_IN_FAILED') ||
-          errorStr.contains('Google Play Services')) {
-        _showGooglePlayServicesFixDialog();
-      } else if (errorStr.contains('ApiException: 10') ||
-          errorStr.contains('SERVICE_VERSION_UPDATE_REQUIRED')) {
-        _showPlayServicesUpdateDialog();
-      } else if (errorStr.contains('network_error') ||
-          errorStr.contains('SocketException') ||
-          errorStr.contains('ClientException')) {
-        _showError(
-          'Koneksi internet bermasalah. Pastikan WiFi/mobile data aktif dan coba lagi.',
-        );
-      } else if (errorStr.contains('INVALID_ACCOUNT') ||
-          errorStr.contains('USER_NOT_REGISTERED')) {
-        // User belum terdaftar di backend
-        _showGoogleUserNotRegisteredDialog();
-      } else if (errorStr.contains('dibatalkan') ||
-          errorStr.contains('canceled') ||
-          errorStr.contains('CANCELLED')) {
-        // User cancelled, no need to show error
-        print('User cancelled Google Sign In');
-      } else {
-        // Generic error
-        _showError(
-          'Login Google gagal: ${errorStr.replaceAll("Exception: ", "").replaceAll("Error: ", "")}',
-        );
-      }
-    } finally {
-      if (mounted) {
-        setState(() => _isGoogleLoading = false);
-      }
-    }
-  }
-
-  void _showPlayServicesUpdateDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text('Update Diperlukan'),
-        content: Text(
-          'Versi Google Play Services di HP Anda terlalu lama. '
-          'Silakan update melalui Google Play Store untuk melanjutkan login dengan Google.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Nanti'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              Navigator.pop(context);
-              _openPlayStoreForGoogleServices();
-            },
-            style: ElevatedButton.styleFrom(backgroundColor: Color(0xFF0D6EFD)),
-            child: Text('Update Sekarang'),
-          ),
-        ],
-      ),
-    );
-  }
-
-// Dialog untuk memperbaiki Google Play Services
-void _showGooglePlayServicesFixDialog() {
-  showDialog(
-    context: context,
-    barrierDismissible: false,
-    builder: (context) => AlertDialog(
-      title: Row(
-        children: [
-          Icon(Icons.build, color: Colors.blue),
-          SizedBox(width: 10),
-          Text('Perbaikan Diperlukan'),
-        ],
-      ),
-      content: Column(
-        mainAxisSize: MainAxisSize.min,
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text('HP Anda membutuhkan:'),
-          SizedBox(height: 10),
-          _buildStepItem('1. Buka "Google Play Store"'),
-          _buildStepItem('2. Cari "Google Play Services"'),
-          _buildStepItem('3. Update ke versi terbaru'),
-          _buildStepItem('4. Restart HP setelah update'),
-          SizedBox(height: 15),
-          Text(
-            'Jika tidak menemukan di Play Store, HP Anda mungkin tidak support Google Services.',
-            style: TextStyle(fontSize: 12, color: Colors.grey),
-          ),
-        ],
-      ),
-      actions: [
-        TextButton(
-          onPressed: () => Navigator.pop(context),
-          child: Text('Nanti'),
-        ),
-        ElevatedButton(
-          onPressed: () {
-            Navigator.pop(context);
-            _openPlayStoreForGoogleServices();
-          },
-          child: Text('Buka Play Store'),
-        ),
-      ],
-    ),
-  );
-}
-
-Widget _buildStepItem(String text) {
-  return Padding(
-    padding: const EdgeInsets.symmetric(vertical: 4),
-    child: Row(
-      children: [
-        Icon(Icons.check_circle, size: 16, color: Colors.green),
-        SizedBox(width: 8),
-        Text(text),
-      ],
-    ),
-  );
-}
-
-// Buka Google Play Services di Play Store
-Future<void> _openPlayStoreForGoogleServices() async {
-  const playStoreUrl = 'market://details?id=com.google.android.gms';
-  const webUrl = 'https://play.google.com/store/apps/details?id=com.google.android.gms';
-  
-  try {
-    if (await canLaunch(playStoreUrl)) {
-      await launch(playStoreUrl);
-    } else if (await canLaunch(webUrl)) {
-      await launch(webUrl);
-    } else {
-      _showError('Tidak dapat membuka Play Store');
-    }
-  } catch (e) {
-    _showError('Gagal membuka Play Store: $e');
-  }
-}
-
-  // Method baru: Dialog untuk user belum terdaftar via Google
-  void _showGoogleUserNotRegisteredDialog() {
-    showDialog(
-      context: context,
-      builder: (BuildContext context) => _buildGoogleRegisterDialog(),
-    );
-  }
-
-  Widget _buildGoogleRegisterDialog() {
-    return Dialog(
-      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-      child: Container(
-        padding: const EdgeInsets.all(28),
-        decoration: BoxDecoration(
-          color: Colors.white,
-          borderRadius: BorderRadius.circular(24),
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            Container(
-              width: 80,
-              height: 80,
-              decoration: BoxDecoration(
-                color: Colors.orange.shade50,
-                shape: BoxShape.circle,
-              ),
-              child: Icon(Icons.person_add, color: Colors.orange, size: 40),
-            ),
-            const SizedBox(height: 20),
-            Text(
-              'Akun Google Belum Terdaftar',
-              style: TextStyle(
-                fontSize: 20,
-                fontWeight: FontWeight.bold,
-                color: Colors.grey.shade800,
-              ),
-            ),
-            const SizedBox(height: 12),
-            Text(
-              'Akun Google Anda belum terdaftar di sistem WargaKita. '
-              'Silakan daftar terlebih dahulu menggunakan email ini.',
-              style: TextStyle(
-                fontSize: 15,
-                color: Colors.grey.shade600,
-                height: 1.4,
-              ),
-              textAlign: TextAlign.center,
-            ),
-            const SizedBox(height: 28),
-            Row(
-              children: [
-                Expanded(
-                  child: _buildOutlinedButton(
-                    text: 'Batal',
-                    onPressed: () => Navigator.of(context).pop(),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                Expanded(
-                  child: _buildElevatedButton(
-                    text: 'Daftar Sekarang',
-                    onPressed: () {
-                      Navigator.of(context).pop();
-                      // Arahkan ke Register Screen
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (context) => RegisterScreen(),
-                        ),
-                      );
-                    },
-                  ),
-                ),
-              ],
-            ),
-          ],
-        ),
-      ),
-    );
-  }
-
-
   void _showEmailNotRegisteredDialog(String email) {
     showDialog(
       context: context,
       builder: (BuildContext context) => _buildRegisterDialog(email),
     );
   }
-
 
   Widget _buildRegisterDialog(String email) {
     return Dialog(
@@ -585,9 +289,10 @@ Future<void> _openPlayStoreForGoogleServices() async {
     );
   }
 
-  // Update method untuk navigasi ke register
+  // Di LoginScreen (_buildRegisterDialog bagian)
   void _navigateToRegisterWithEmail(String email) {
-    Navigator.pushReplacement(
+    Navigator.push(
+      // Ubah dari pushReplacement menjadi push
       context,
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) =>
@@ -597,33 +302,6 @@ Future<void> _openPlayStoreForGoogleServices() async {
         transitionDuration: _transitionDuration,
       ),
     );
-  }
-
-  void _saveAuthData(AuthResponse result) {
-    print('💾 Saving auth data...');
-    print('   User Email: ${result.user?.email}');
-
-    if (_rememberMe) {
-      print('💾 Remember me: true');
-    }
-  }
-
-  void _navigateToHome(AuthResponse result) {
-    if (result.user != null) {
-      Navigator.pushAndRemoveUntil(
-        context,
-        PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) =>
-              HomeScreen(user: result.user!),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) =>
-              _createSlideTransition(animation, child),
-          transitionDuration: _transitionDuration,
-        ),
-        (route) => false,
-      );
-    } else {
-      _showError('Data user tidak valid');
-    }
   }
 
   Widget _createSlideTransition(Animation<double> animation, Widget child) {
@@ -721,64 +399,6 @@ Future<void> _openPlayStoreForGoogleServices() async {
     );
   }
 
-  Widget _buildGoogleButton() {
-    return AnimatedContainer(
-      duration: const Duration(milliseconds: 300),
-      width: double.infinity,
-      height: 56,
-      decoration: BoxDecoration(
-        borderRadius: _buttonBorderRadius,
-        boxShadow: _isGoogleLoading
-            ? []
-            : [
-                BoxShadow(
-                  color: Colors.grey.withOpacity(0.2),
-                  blurRadius: 12,
-                  offset: const Offset(0, 4),
-                ),
-              ],
-      ),
-      child: OutlinedButton(
-        onPressed: _isGoogleLoading ? null : _signInWithGoogle,
-        style: OutlinedButton.styleFrom(
-          backgroundColor: Colors.white,
-          side: BorderSide(color: Colors.grey.shade300, width: 1.5),
-          shape: RoundedRectangleBorder(borderRadius: _buttonBorderRadius),
-          padding: const EdgeInsets.symmetric(horizontal: 20),
-        ),
-        child: _isGoogleLoading
-            ? SizedBox(
-                width: 24,
-                height: 24,
-                child: CircularProgressIndicator(
-                  strokeWidth: 2.5,
-                  color: _primaryColor,
-                ),
-              )
-            : Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Image.asset(
-                    'assets/images/google.png',
-                    width: 26,
-                    height: 26,
-                  ),
-                  const SizedBox(width: 12),
-                  const Text(
-                    'Lanjutkan dengan Google',
-                    style: TextStyle(
-                      color: Colors.black87,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                ],
-              ),
-      ),
-    );
-  }
-
-  // Update _buildEmailInput untuk menampilkan status prefill
   Widget _buildEmailInput() {
     final isPrefilled =
         widget.prefilledEmail != null && widget.prefilledEmail!.isNotEmpty;
@@ -987,30 +607,6 @@ Future<void> _openPlayStoreForGoogleServices() async {
     );
   }
 
-  Widget _buildDividerWithLabel() {
-    return Row(
-      children: [
-        Expanded(
-          child: Divider(color: Colors.grey.shade300, thickness: 1, height: 1),
-        ),
-        Padding(
-          padding: const EdgeInsets.symmetric(horizontal: 16),
-          child: Text(
-            'atau dengan email',
-            style: TextStyle(
-              color: Colors.grey.shade600,
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-            ),
-          ),
-        ),
-        Expanded(
-          child: Divider(color: Colors.grey.shade300, thickness: 1, height: 1),
-        ),
-      ],
-    );
-  }
-
   Widget _buildRememberMeCheckbox() {
     return Row(
       children: [
@@ -1043,7 +639,6 @@ Future<void> _openPlayStoreForGoogleServices() async {
     );
   }
 
-  // Update _buildRegisterSection untuk handle navigasi dengan email
   Widget _buildRegisterSection() {
     return Center(
       child: Column(
@@ -1154,7 +749,7 @@ Future<void> _openPlayStoreForGoogleServices() async {
                 const Padding(
                   padding: EdgeInsets.symmetric(horizontal: 40),
                   child: Text(
-                    'Masuk dengan email @gmail.com atau akun Google untuk melanjutkan',
+                    'Masuk dengan email @gmail.com untuk melanjutkan',
                     style: TextStyle(
                       fontSize: 15,
                       color: Colors.white70,
@@ -1197,10 +792,6 @@ Future<void> _openPlayStoreForGoogleServices() async {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                _buildGoogleButton(),
-                const SizedBox(height: 32),
-                _buildDividerWithLabel(),
-                const SizedBox(height: 32),
                 _buildEmailInput(),
                 const SizedBox(height: 20),
                 _buildRememberMeCheckbox(),

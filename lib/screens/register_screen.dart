@@ -399,7 +399,7 @@ class _RegisterScreenState extends State<RegisterScreen>
           padding: const EdgeInsets.all(20),
           child: Text(
             'Semua media sosial sudah ditambahkan',
-            style: TextStyle(color: Colors.grey.shade600) ,
+            style: TextStyle(color: Colors.grey.shade600),
             textAlign: TextAlign.center,
           ),
         ),
@@ -1648,7 +1648,6 @@ class _RegisterScreenState extends State<RegisterScreen>
     );
   }
 
-
   Widget _buildSocialMediaField({
     required TextEditingController controller,
     required String label,
@@ -1880,7 +1879,7 @@ class _RegisterScreenState extends State<RegisterScreen>
     );
   }
 
-   @override
+  @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.white,
@@ -1898,7 +1897,12 @@ class _RegisterScreenState extends State<RegisterScreen>
               size: 18,
             ),
           ),
-          onPressed: _isLoading ? null : () => Navigator.pop(context),
+          onPressed: _isLoading
+              ? null
+              : () {
+                  // Tambahkan logic untuk kembali ke LoginScreen dengan membawa email
+                  Navigator.pop(context);
+                },
         ),
         backgroundColor: Colors.white,
         elevation: 1,
