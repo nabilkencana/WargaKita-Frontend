@@ -1,5 +1,8 @@
 import 'package:flutter/material.dart';
+import 'package:warga_app/config/config.dart';
 import 'package:warga_app/models/notification_model_extension.dart';
+import 'package:warga_app/services/websocket_service.dart';
+import 'package:flutter/widgets.dart';
 import 'dart:async';
 import '../models/user_model.dart';
 import '../models/announcement_model.dart';
@@ -23,7 +26,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   late Future<List<Announcement>> _announcementsFuture;
   List<Announcement> _announcements = [];
   List<Announcement> _filteredAnnouncements = [];
@@ -35,8 +38,6 @@ class _HomeScreenState extends State<HomeScreen> {
   List<NotificationModel> _notifications = [];
   int _unreadNotifications = 0;
   bool _isLoadingNotifications = false;
-
-  // TAMBAHKAN: Flag untuk auth check
 
   // TAMBAHKAN: User data yang bisa diupdate
   late User _currentUser;
@@ -51,23 +52,478 @@ class _HomeScreenState extends State<HomeScreen> {
   // TAMBAHKAN variable untuk tracking last load time
   DateTime? _lastProfileLoadTime;
 
+  // TAMBAHKAN: WebSocket Service
+  final WebSocketService _webSocketService = WebSocketService();
 
   @override
   void initState() {
     super.initState();
     _currentUser = widget.user;
 
-    // Langsung set UI ready
+    WidgetsBinding.instance.addObserver(this);
 
     _announcementsFuture = AnnouncementService.getAnnouncements();
+
+    // Inisialisasi WebSocket
+    _initWebSocket();
 
     // Load data background tanpa blocking
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadEverythingInBackground();
     });
 
-    // Timer refresh
-    _startAutoRefresh();
+  }
+
+  Future<void> _initWebSocket() async {
+    try {
+      print('🔄 Initializing WebSocket...');
+
+      // 1. Get user ID
+      int userId;
+      if (widget.user.id is String) {
+        userId = int.tryParse(widget.user.id as String) ?? 1;
+      } else if (widget.user.id is int) {
+        userId = widget.user.id as int;
+      } else {
+        userId = 1;
+      }
+
+      print('👤 Using user ID: $userId');
+      print('📡 API URL: ${Config.apiUrl}');
+
+      // 2. Test connection terlebih dahulu
+      print('🧪 Testing WebSocket connection...');
+      final testResult = await _webSocketService.testConnection(userId);
+      print('🧪 Test result: ${testResult ? "✅ Success" : "❌ Failed"}');
+
+      if (!testResult) {
+        print('⚠️ WebSocket test failed, skipping connection');
+        return;
+      }
+
+      // 3. Setup callback
+      _webSocketService.onNotificationReceived = (notification) {
+        print('📨 Notification received: ${notification['title']}');
+        _handleIncomingNotification(notification);
+      };
+
+      _webSocketService.onAnnouncementReceived = (announcement) {
+        print('📢 Announcement received: ${announcement['title']}');
+        _handleIncomingAnnouncement(announcement);
+      };
+
+      // 4. Connect
+      await _webSocketService.connect(userId);
+
+      setState(() {
+      });
+
+      if (_webSocketService.isConnected) {
+        print('✅ WebSocket connected successfully');
+
+        // Kirim test message
+        Future.delayed(const Duration(seconds: 2), () {
+          _sendTestPing();
+        });
+      } else {
+        print('⚠️ WebSocket connection failed');
+      }
+    } catch (e) {
+      print('❌ Error initializing WebSocket: $e');
+    }
+  }
+
+  void _sendTestPing() {
+    try {
+      // Kirim ping untuk test
+      print('🏓 Sending test ping...');
+      // Note: Anda perlu menambahkan method untuk send message ke WebSocketService
+    } catch (e) {
+      print('⚠️ Error sending ping: $e');
+    }
+  }
+
+  void _handleIncomingNotification(Map<String, dynamic> notification) {
+
+     print('📨 Handling incoming notification from WebSocket...');
+  print('📊 Notification keys: ${notification.keys.toList()}');
+  print('📊 Notification type: ${notification['type']}');
+  print('📊 Full notification: $notification');
+
+  try {
+    // Cek apakah ini notification langsung atau data dalam 'data' key
+    Map<String, dynamic> notificationData;
+    
+    if (notification.containsKey('data') && notification['data'] is Map) {
+      // Format: {type: 'NEW_NOTIFICATION', data: {...}}
+      notificationData = Map<String, dynamic>.from(notification['data']);
+      print('📥 Using data from notification[\'data\']');
+    } else {
+      // Format: notification langsung
+      notificationData = Map<String, dynamic>.from(notification);
+      print('📥 Using direct notification data');
+    }
+
+    // Parse type
+    final notificationType = notificationData['type']?.toString() ?? 'SYSTEM';
+    print('📋 Parsed notification type: $notificationType');
+
+    // Handle berdasarkan type
+    if (notificationType == 'ANNOUNCEMENT' || 
+        notificationData['title']?.toString().contains('Pengumuman') == true) {
+      _handleAnnouncementNotification(notificationData);
+    } else {
+      _handleRegularNotification(notificationData);
+    }
+  } catch (e) {
+    print('❌ Error handling notification: $e');
+    print('❌ Stack trace: ${e.toString()}');
+  }
+  
+    // Cek jika notification sudah ada dalam list
+    final exists = _notifications.any((n) => n.id == notification['id']);
+
+    if (!exists) {
+      setState(() {
+        // Parse notification data sesuai dengan model Anda
+        final notificationModel = NotificationModel(
+          id:
+              notification['id']?.toString() ??
+              DateTime.now().millisecondsSinceEpoch.toString(),
+          userId:
+              int.tryParse(notification['userId']?.toString() ?? '0') ??
+              widget.user.id as int,
+          type: _parseNotificationType(
+            notification['type']?.toString() ?? 'SYSTEM',
+          ),
+          title: notification['title']?.toString() ?? 'Notifikasi Baru',
+          message: notification['message']?.toString() ?? '',
+          icon: notification['icon']?.toString(),
+          iconColor: notification['iconColor']?.toString(),
+          data: notification['data'] != null && notification['data'] is Map
+              ? Map<String, dynamic>.from(notification['data'])
+              : null,
+          isRead: false,
+          isArchived: false,
+          createdAt: DateTime.now(),
+          updatedAt: DateTime.now(),
+          createdBy:
+              int.tryParse(notification['createdBy']?.toString() ?? '0') ?? 0,
+        );
+
+        _notifications.insert(0, notificationModel);
+        _unreadNotifications++;
+
+        // Tampilkan snackbar atau local notification
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.notifications, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Text(
+                    'Notifikasi baru: ${notification['title']}',
+                    style: const TextStyle(color: Colors.white),
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.blue.shade700,
+            duration: const Duration(seconds: 3),
+            action: SnackBarAction(
+              label: 'Lihat',
+              textColor: Colors.white,
+              onPressed: () {
+                _showNotifications();
+              },
+            ),
+          ),
+        );
+      });
+    }
+  }
+
+  void _handleAnnouncementNotification(Map<String, dynamic> notificationData) {
+    print('📢 Handling announcement notification...');
+
+    try {
+      // Buat NotificationModel dari data WebSocket
+      final notificationModel = NotificationModel(
+        id:
+            notificationData['id']?.toString() ??
+            'ws_${DateTime.now().millisecondsSinceEpoch}',
+        userId:
+            int.tryParse(notificationData['userId']?.toString() ?? '0') ??
+            _currentUser.id,
+        type: _parseNotificationType(
+          notificationData['type']?.toString() ?? 'ANNOUNCEMENT',
+        ),
+        title: notificationData['title']?.toString() ?? 'Pengumuman Baru',
+        message: notificationData['message']?.toString() ?? '',
+        icon: notificationData['icon']?.toString() ?? 'announcement',
+        iconColor: notificationData['iconColor']?.toString() ?? '#3B82F6',
+        data:
+            notificationData['data'] != null && notificationData['data'] is Map
+            ? Map<String, dynamic>.from(notificationData['data'])
+            : {
+                'announcementId': notificationData['announcementId'] ?? 0,
+                'action': 'view_announcement',
+                'timestamp': DateTime.now().toIso8601String(),
+              },
+        isRead: false,
+        isArchived: false,
+        createdAt: notificationData['createdAt'] != null
+            ? DateTime.tryParse(notificationData['createdAt'].toString()) ??
+                  DateTime.now()
+            : DateTime.now(),
+        updatedAt: DateTime.now(),
+        createdBy:
+            int.tryParse(notificationData['createdBy']?.toString() ?? '0') ?? 0,
+      );
+
+      print('✅ Created notification model: ${notificationModel.title}');
+
+      if (mounted) {
+        setState(() {
+          // Cek duplikat
+          final exists = _notifications.any(
+            (n) => n.id == notificationModel.id,
+          );
+          if (!exists) {
+            _notifications.insert(0, notificationModel);
+            _unreadNotifications++;
+            print(
+              '✅ Added to notifications list. Total: ${_notifications.length}',
+            );
+          } else {
+            print('⚠️ Notification already exists, skipping');
+          }
+        });
+      }
+
+      // Tampilkan snackbar
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.announcement, color: Colors.white, size: 20),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        '📢 Pengumuman Baru',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 14,
+                        ),
+                      ),
+                      Text(
+                        notificationModel.title,
+                        style: TextStyle(color: Colors.white, fontSize: 12),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+            backgroundColor: Colors.blue.shade800,
+            duration: const Duration(seconds: 4),
+            action: SnackBarAction(
+              label: 'Lihat',
+              textColor: Colors.white,
+              onPressed: () {
+                _showNotifications();
+              },
+            ),
+            behavior: SnackBarBehavior.floating,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(10),
+            ),
+          ),
+        );
+      }
+
+      // Refresh announcements
+      _refreshAnnouncements();
+    } catch (e) {
+      print('❌ Error creating announcement notification: $e');
+    }
+  }
+
+  void _handleRegularNotification(Map<String, dynamic> notificationData) {
+    print('🔔 Handling regular notification...');
+
+    try {
+      // Buat NotificationModel
+      final notificationModel = NotificationModel(
+        id:
+            notificationData['id']?.toString() ??
+            'ws_${DateTime.now().millisecondsSinceEpoch}',
+        userId:
+            int.tryParse(notificationData['userId']?.toString() ?? '0') ??
+            _currentUser.id,
+        type: _parseNotificationType(
+          notificationData['type']?.toString() ?? 'SYSTEM',
+        ),
+        title: notificationData['title']?.toString() ?? 'Notifikasi Baru',
+        message: notificationData['message']?.toString() ?? '',
+        icon: notificationData['icon']?.toString(),
+        iconColor: notificationData['iconColor']?.toString(),
+        data:
+            notificationData['data'] != null && notificationData['data'] is Map
+            ? Map<String, dynamic>.from(notificationData['data'])
+            : null,
+        isRead: false,
+        isArchived: false,
+        createdAt: notificationData['createdAt'] != null
+            ? DateTime.tryParse(notificationData['createdAt'].toString()) ??
+                  DateTime.now()
+            : DateTime.now(),
+        updatedAt: DateTime.now(),
+        createdBy:
+            int.tryParse(notificationData['createdBy']?.toString() ?? '0') ?? 0,
+      );
+
+      if (mounted) {
+        setState(() {
+          final exists = _notifications.any(
+            (n) => n.id == notificationModel.id,
+          );
+          if (!exists) {
+            _notifications.insert(0, notificationModel);
+            _unreadNotifications++;
+          }
+        });
+      }
+
+      // Tampilkan snackbar untuk notifikasi penting
+      if (notificationModel.type == NotificationType.EMERGENCY) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Row(
+              children: [
+                Icon(Icons.warning, color: Colors.white),
+                const SizedBox(width: 8),
+                Expanded(child: Text('🚨 ${notificationModel.title}')),
+              ],
+            ),
+            backgroundColor: Colors.red,
+            duration: const Duration(seconds: 5),
+          ),
+        );
+      }
+    } catch (e) {
+      print('❌ Error creating regular notification: $e');
+    }
+  }
+
+  void _handleIncomingAnnouncement(Map<String, dynamic> announcement) {
+    // Konversi data announcement ke model
+    final announcementModel = Announcement(
+      id: announcement['announcementId'] ?? 0,
+      title: announcement['title']?.toString() ?? 'Pengumuman Baru',
+      description: announcement['message']?.toString() ?? '',
+      targetAudience:
+          announcement['targetAudience']?.toString() ?? 'ALL_RESIDENTS',
+      date: DateTime.now(),
+      day: 'Hari ini',
+      createdAt: DateTime.now(),
+      admin: Admin(
+        id: announcement['createdBy'] ?? 0,
+        namaLengkap: announcement['createdByName']?.toString() ?? 'Admin',
+        email: '',
+      ),
+    );
+
+    // Tambahkan announcement ke list
+    setState(() {
+      _announcements.insert(0, announcementModel);
+      _filteredAnnouncements = _announcements;
+    });
+
+    // Tampilkan snackbar khusus untuk announcement
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Row(
+          children: [
+            Icon(Icons.announcement, color: Colors.white, size: 20),
+            const SizedBox(width: 8),
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    '📢 Pengumuman Baru',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  Text(
+                    announcement['title']?.toString() ?? '',
+                    style: const TextStyle(color: Colors.white, fontSize: 12),
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
+        backgroundColor: Colors.blue.shade800,
+        duration: const Duration(seconds: 4),
+        action: SnackBarAction(
+          label: 'Baca',
+          textColor: Colors.white,
+          onPressed: () {
+            _showAnnouncementDetails(announcementModel);
+          },
+        ),
+      ),
+    );
+
+    // Auto refresh announcements
+    _refreshAnnouncements();
+  }
+
+  NotificationType _parseNotificationType(String type) {
+    switch (type) {
+      case 'ANNOUNCEMENT':
+        return NotificationType.ANNOUNCEMENT;
+      case 'EMERGENCY':
+        return NotificationType.EMERGENCY;
+      case 'BILL':
+        return NotificationType.BILL;
+      case 'PAYMENT':
+        return NotificationType.PAYMENT;
+      case 'REPORT':
+        return NotificationType.REPORT;
+      case 'COMMUNITY':
+        return NotificationType.COMMUNITY;
+      default:
+        return NotificationType.SYSTEM;
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    print('App state changed: $state');
+
+    if (state == AppLifecycleState.resumed) {
+      // App kembali ke foreground
+      _loadNotifications();
+      _refreshAnnouncements();
+    } else if (state == AppLifecycleState.paused) {
+      // App ke background - cleanup resources
+      _webSocketService.disconnect();
+    }
   }
 
   // Fungsi background loading
@@ -91,28 +547,40 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-
   @override
   void dispose() {
+    _webSocketService.disconnect();
+    WidgetsBinding.instance.removeObserver(this);
     _searchController.dispose();
     _notificationTimer?.cancel();
     _announcementTimer?.cancel();
     super.dispose();
   }
 
-  // 🔄 TAMBAHKAN: Fungsi untuk start auto refresh
-  void _startAutoRefresh() {
-    // Refresh notifikasi setiap 30 detik
-    _notificationTimer = Timer.periodic(
-      Duration(seconds: 30),
-      (timer) => _loadNotifications(),
-    );
+// 🔄 TAMBAHKAN: Fungsi untuk otomatis menandai semua notifikasi sebagai dibaca saat modal dibuka
+  Future<void> _autoMarkAllNotificationsAsViewed() async {
+    try {
+      // Hanya tandai jika ada notifikasi yang belum dibaca
+      if (_unreadNotifications > 0) {
+        print('🔔 Auto marking all notifications as viewed...');
 
-    // Refresh pengumuman setiap 1 menit
-    _announcementTimer = Timer.periodic(
-      Duration(minutes: 1),
-      (timer) => _refreshAnnouncements(),
-    );
+        // Update UI terlebih dahulu untuk feedback instan
+        setState(() {
+          _notifications = _notifications.map((notif) {
+            if (!notif.isRead) {
+              return notif.copyWith(isRead: true, readAt: DateTime.now());
+            }
+            return notif;
+          }).toList();
+          _unreadNotifications = 0;
+        });
+
+        // Kirim request ke API di background
+        await NotificationService.markAllAsRead();
+      }
+    } catch (e) {
+      print('⚠️ Error auto-marking notifications: $e');
+    }
   }
 
   // 🔄 UPDATE: Fungsi untuk load notifikasi real
@@ -141,7 +609,6 @@ class _HomeScreenState extends State<HomeScreen> {
       }
     } catch (e) {
       print('⚠️ Error loading notifications: $e');
-      _loadFallbackNotifications();
     } finally {
       if (showLoading && mounted) {
         setState(() => _isLoadingNotifications = false);
@@ -149,50 +616,14 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // 🔄 TAMBAHKAN: Fallback notifications untuk development
-  void _loadFallbackNotifications() {
-    setState(() {
-      _notifications = [
-        NotificationModel(
-          id: '1',
-          userId:
-              int.tryParse(widget.user.id.toString()) ?? 1, // Convert ke int
-          type: NotificationType.COMMUNITY,
-          title: 'Kerja Bakti Bersama',
-          message: 'Anda telah bergabung dalam kegiatan kerja bakti',
-          icon: 'people',
-          iconColor: '#10B981',
-          isRead: false,
-          isArchived: false,
-          createdBy: 1,
-          createdAt: DateTime.now().subtract(Duration(minutes: 5)),
-          updatedAt: DateTime.now(),
-        ),
-        NotificationModel(
-          id: '2',
-          userId: int.tryParse(widget.user.id.toString()) ?? 1,
-          type: NotificationType.ANNOUNCEMENT,
-          title: 'Pengumuman Baru',
-          message: 'Ada pengumuman penting dari admin',
-          icon: 'announcement',
-          iconColor: '#3B82F6',
-          isRead: false,
-          isArchived: false,
-          createdBy: 1,
-          createdAt: DateTime.now().subtract(Duration(hours: 1)),
-          updatedAt: DateTime.now(),
-        ),
-      ];
-      _unreadNotifications = 2;
-    });
-  }
-
   // 🔄 UPDATE: Fungsi untuk mark notification as read
   void _markNotificationAsRead(String notificationId) async {
     try {
-      final success = await NotificationService.markAsRead(notificationId);
+      final result = await NotificationService.markAsRead(
+        notificationId: notificationId,
+      );
 
-      if (success) {
+      if (result['success'] == true) {
         setState(() {
           final index = _notifications.indexWhere(
             (notif) => notif.id == notificationId,
@@ -202,7 +633,7 @@ class _HomeScreenState extends State<HomeScreen> {
               isRead: true,
               readAt: DateTime.now(),
             );
-            _unreadNotifications--;
+            _unreadNotifications = _unreadNotifications - 1;
           }
         });
       }
@@ -211,21 +642,60 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // 🔄 UPDATE: Fungsi untuk mark all notifications as read
-  void _markAllNotificationsAsRead() async {
+  // 🔄 UPDATE: Fungsi untuk mark all notifications as read dengan feedback visual
+  Future<void> _markAllNotificationsAsRead() async {
     try {
-      final success = await NotificationService.markAllAsRead();
+      // Simpan notifikasi lama untuk fallback jika error
+      final oldNotifications = List<NotificationModel>.from(_notifications);
 
-      if (success) {
-        setState(() {
-          _notifications = _notifications.map((notif) {
-            return notif.copyWith(isRead: true, readAt: DateTime.now());
-          }).toList();
-          _unreadNotifications = 0;
-        });
+      // Update UI terlebih dahulu untuk feedback instan
+      setState(() {
+        _notifications = _notifications.map((notif) {
+          return notif.copyWith(isRead: true, readAt: DateTime.now());
+        }).toList();
+        _unreadNotifications = 0;
+      });
+
+      // Tampilkan feedback
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Row(
+            children: [
+              Icon(Icons.done_all, color: Colors.white, size: 20),
+              const SizedBox(width: 8),
+              const Text('Semua notifikasi telah ditandai sebagai dibaca'),
+            ],
+          ),
+          backgroundColor: Colors.green,
+          duration: const Duration(seconds: 2),
+        ),
+      );
+
+      // Kirim request ke API
+      final result = await NotificationService.markAllAsRead();
+
+      if (result['success'] != true) {
+        // Rollback jika API gagal
+        if (mounted) {
+          setState(() {
+            _notifications = oldNotifications;
+            _unreadNotifications = oldNotifications
+                .where((notif) => !notif.isRead)
+                .length;
+          });
+        }
       }
     } catch (e) {
       print('⚠️ Error marking all notifications as read: $e');
+      // Tampilkan error
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Gagal menandai semua: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
     }
   }
 
@@ -800,10 +1270,12 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  // 🔄 UPDATE: Fungsi untuk show notifications dengan data real
-  void _showNotifications() {
+  // 🔄 UPDATE: Fungsi untuk show notifications dengan auto-mark-as-read
+  void _showNotifications() async {
     // Refresh notifikasi sebelum menampilkan
-    _loadNotifications();
+    await _loadNotifications();
+
+    await _autoMarkAllNotificationsAsViewed();
 
     showModalBottomSheet(
       context: context,
@@ -811,7 +1283,7 @@ class _HomeScreenState extends State<HomeScreen> {
       backgroundColor: Colors.transparent,
       builder: (context) {
         return Container(
-          height: MediaQuery.of(context).size.height * 0.8,
+          height: MediaQuery.of(context).size.height * 0.85,
           decoration: const BoxDecoration(
             color: Colors.white,
             borderRadius: BorderRadius.only(
@@ -821,7 +1293,7 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
           child: Column(
             children: [
-              // Header
+              // Header dengan tombol Tandai Semua
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -850,16 +1322,27 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                     ),
                     const Spacer(),
+
+                    // TOMBOL TANDAI SEMUA JIKA ADA NOTIF BARU
                     if (_unreadNotifications > 0)
                       GestureDetector(
-                        onTap: () {
-                          _markAllNotificationsAsRead();
-                          Navigator.pop(context);
+                        onTap: () async {
+                          await _markAllNotificationsAsRead();
+                          // Refresh UI setelah menandai semua
+                          setState(() {
+                            _unreadNotifications = 0;
+                            _notifications = _notifications.map((notif) {
+                              return notif.copyWith(
+                                isRead: true,
+                                readAt: DateTime.now(),
+                              );
+                            }).toList();
+                          });
                         },
                         child: Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 12,
-                            vertical: 6,
+                            vertical: 8,
                           ),
                           decoration: BoxDecoration(
                             color: Colors.white.withOpacity(0.2),
@@ -868,13 +1351,13 @@ class _HomeScreenState extends State<HomeScreen> {
                           child: Row(
                             children: [
                               Icon(
-                                Icons.done_all,
+                                Icons.done_all_rounded,
                                 color: Colors.white,
                                 size: 16,
                               ),
-                              const SizedBox(width: 4),
+                              const SizedBox(width: 6),
                               Text(
-                                '$_unreadNotifications Baru',
+                                'Tandai Semua',
                                 style: const TextStyle(
                                   color: Colors.white,
                                   fontSize: 12,
@@ -888,23 +1371,85 @@ class _HomeScreenState extends State<HomeScreen> {
                   ],
                 ),
               ),
+
+              // 🔄 TAMBAHKAN: Tombol cepat di bawah header
+              if (_unreadNotifications > 0)
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  decoration: BoxDecoration(color: Colors.blue.shade50),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        '$_unreadNotifications notifikasi belum dibaca',
+                        style: TextStyle(
+                          color: Colors.blue.shade700,
+                          fontSize: 13,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                      InkWell(
+                        onTap: () async {
+                          await _markAllNotificationsAsRead();
+                          setState(() {
+                            _unreadNotifications = 0;
+                          });
+                        },
+                        child: Row(
+                          children: [
+                            Icon(
+                              Icons.done_all,
+                              color: Colors.blue.shade700,
+                              size: 16,
+                            ),
+                            const SizedBox(width: 4),
+                            Text(
+                              'Tandai semua',
+                              style: TextStyle(
+                                color: Colors.blue.shade700,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
               Expanded(
                 child: _isLoadingNotifications
                     ? Center(child: CircularProgressIndicator())
                     : _notifications.isEmpty
                     ? _buildEmptyNotifications()
-                    : ListView(
+                    : ListView.builder(
                         padding: const EdgeInsets.all(16),
-                        children: [
-                          ..._notifications.map((notification) {
-                            return Column(
-                              children: [
-                                _buildNotificationItem(notification),
-                                const SizedBox(height: 12),
-                              ],
-                            );
-                          }).toList(),
-                        ],
+                        itemCount: _notifications.length,
+                        itemBuilder: (context, index) {
+                          final notification = _notifications[index];
+                          return Column(
+                            children: [
+                              // 🔄 UPDATE: Auto-mark-as-read saat diklik
+                              _buildNotificationItem(
+                                notification,
+                                onTap: () {
+                                  // Otomatis tandai sebagai dibaca saat diklik
+                                  if (!notification.isRead) {
+                                    _markNotificationAsRead(
+                                      notification.id,
+                                    );
+                                  }
+                                  _handleNotificationAction(notification);
+                                },
+                              ),
+                              const SizedBox(height: 12),
+                            ],
+                          );
+                        },
                       ),
               ),
             ],
@@ -912,29 +1457,28 @@ class _HomeScreenState extends State<HomeScreen> {
         );
       },
     ).then((_) {
-      // Update badge count setelah modal ditutup
-      setState(() {
-        _unreadNotifications = _notifications
-            .where((notif) => !notif.isRead)
-            .length;
-      });
+      // 🔄 UPDATE: Otomatis refresh setelah modal ditutup
+      _loadNotifications();
     });
   }
 
-  // 🔄 UPDATE: Widget untuk menampilkan notifikasi real
-  Widget _buildNotificationItem(NotificationModel notification) {
+  // 🔄 UPDATE: Widget notification item dengan callback onTap
+  Widget _buildNotificationItem(
+    NotificationModel notification, {
+    VoidCallback? onTap,
+  }) {
     return GestureDetector(
-      onTap: () {
-        if (!notification.isRead) {
-          _markNotificationAsRead(notification.id);
-        }
-        _handleNotificationAction(notification);
-      },
+      onTap: onTap,
       child: Container(
         decoration: BoxDecoration(
-          color: Colors.white,
+          color: notification.isRead ? Colors.white : Colors.blue.shade50,
           borderRadius: BorderRadius.circular(12),
-          border: Border.all(color: Colors.grey.shade200),
+          border: Border.all(
+            color: notification.isRead
+                ? Colors.grey.shade200
+                : Colors.blue.shade100,
+            width: notification.isRead ? 1 : 1.5,
+          ),
           boxShadow: [
             BoxShadow(
               color: Colors.black.withOpacity(0.05),
@@ -948,7 +1492,9 @@ class _HomeScreenState extends State<HomeScreen> {
             width: 40,
             height: 40,
             decoration: BoxDecoration(
-              color: notification.color.withOpacity(0.1),
+              color: notification.isRead
+                  ? notification.color.withOpacity(0.1)
+                  : notification.color.withOpacity(0.15),
               shape: BoxShape.circle,
             ),
             child: Icon(
@@ -963,7 +1509,7 @@ class _HomeScreenState extends State<HomeScreen> {
               fontWeight: FontWeight.w600,
               fontSize: 14,
               color: notification.isRead
-                  ? Colors.grey.shade600
+                  ? Colors.grey.shade700
                   : Colors.black87,
             ),
           ),
@@ -974,15 +1520,34 @@ class _HomeScreenState extends State<HomeScreen> {
                 notification.message,
                 style: TextStyle(
                   color: notification.isRead
-                      ? Colors.grey.shade500
-                      : Colors.grey.shade600,
+                      ? Colors.grey.shade600
+                      : Colors.grey.shade700,
                   fontSize: 12,
                 ),
+                maxLines: 2,
+                overflow: TextOverflow.ellipsis,
               ),
               const SizedBox(height: 4),
-              Text(
-                notification.timeAgo,
-                style: TextStyle(color: Colors.grey.shade400, fontSize: 10),
+              Row(
+                children: [
+                  Icon(
+                    Icons.access_time,
+                    size: 10,
+                    color: notification.isRead
+                        ? Colors.grey.shade400
+                        : Colors.blue.shade500,
+                  ),
+                  const SizedBox(width: 4),
+                  Text(
+                    notification.timeAgo,
+                    style: TextStyle(
+                      color: notification.isRead
+                          ? Colors.grey.shade400
+                          : Colors.blue.shade600,
+                      fontSize: 10,
+                    ),
+                  ),
+                ],
               ),
             ],
           ),
@@ -990,12 +1555,23 @@ class _HomeScreenState extends State<HomeScreen> {
               ? Container(
                   width: 8,
                   height: 8,
-                  decoration: const BoxDecoration(
+                  decoration: BoxDecoration(
                     color: Colors.red,
                     shape: BoxShape.circle,
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.red.withOpacity(0.4),
+                        blurRadius: 4,
+                        offset: const Offset(0, 1),
+                      ),
+                    ],
                   ),
                 )
-              : const SizedBox(width: 8),
+              : Icon(
+                  Icons.check_circle,
+                  color: Colors.green.shade400,
+                  size: 16,
+                ),
         ),
       ),
     );
@@ -1476,26 +2052,45 @@ class _HomeScreenState extends State<HomeScreen> {
                       Positioned(
                         right: 0,
                         top: 0,
-                        child: Container(
-                          padding: const EdgeInsets.all(2),
-                          decoration: const BoxDecoration(
-                            color: Colors.red,
-                            shape: BoxShape.circle,
-                          ),
-                          constraints: const BoxConstraints(
-                            minWidth: 16,
-                            minHeight: 16,
-                          ),
-                          child: Text(
-                            _unreadNotifications > 9
-                                ? '9+'
-                                : '$_unreadNotifications',
-                            style: const TextStyle(
-                              color: Colors.white,
-                              fontSize: 10,
-                              fontWeight: FontWeight.bold,
+                        child: GestureDetector(
+                          onTap: () {
+                            // Tandai semua saat badge diklik (opsional)
+                            if (_unreadNotifications > 0) {
+                              _markAllNotificationsAsRead();
+                            }
+                          },
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 300),
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              color: _unreadNotifications > 0
+                                  ? Colors.red
+                                  : Colors.transparent,
+                              shape: BoxShape.circle,
+                              border: Border.all(color: Colors.white, width: 2),
+                              boxShadow: [
+                                BoxShadow(
+                                  color: Colors.red.withOpacity(0.3),
+                                  blurRadius: 6,
+                                  offset: const Offset(0, 2),
+                                ),
+                              ],
                             ),
-                            textAlign: TextAlign.center,
+                            constraints: BoxConstraints(
+                              minWidth: _unreadNotifications > 9 ? 28 : 22,
+                              minHeight: _unreadNotifications > 9 ? 28 : 22,
+                            ),
+                            child: Text(
+                              _unreadNotifications > 9
+                                  ? '9+'
+                                  : '$_unreadNotifications',
+                              style: TextStyle(
+                                color: Colors.white,
+                                fontSize: _unreadNotifications > 9 ? 10 : 12,
+                                fontWeight: FontWeight.bold,
+                              ),
+                              textAlign: TextAlign.center,
+                            ),
                           ),
                         ),
                       ),

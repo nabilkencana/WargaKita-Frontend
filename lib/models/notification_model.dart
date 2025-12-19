@@ -46,36 +46,56 @@ class NotificationModel {
   });
 
   factory NotificationModel.fromJson(Map<String, dynamic> json) {
+    // Debug: print raw JSON untuk troubleshooting
+    // print('📄 Parsing notification JSON: $json');
+
     return NotificationModel(
-      id: json['id'],
-      userId: json['userId'],
-      type: _parseNotificationType(json['type']),
-      title: json['title'],
-      message: json['message'],
-      icon: json['icon'],
-      iconColor: json['iconColor'],
-      data: json['data'] != null
+      id: json['id']?.toString() ?? '',
+      userId: json['userId'] != null
+          ? int.tryParse(json['userId'].toString()) ?? 0
+          : 0,
+      type: _parseNotificationType(json['type']?.toString() ?? 'SYSTEM'),
+      title: json['title']?.toString() ?? 'No Title',
+      message: json['message']?.toString() ?? 'No Message',
+      icon: json['icon']?.toString(),
+      iconColor: json['iconColor']?.toString(),
+      data: json['data'] != null && json['data'] is Map
           ? Map<String, dynamic>.from(json['data'])
           : null,
-      isRead: json['isRead'],
-      isArchived: json['isArchived'],
+      isRead:
+          json['isRead']?.toString().toLowerCase() == 'true' ||
+          json['isRead'] == true ||
+          (json['isRead'] is int && json['isRead'] == 1),
+      isArchived:
+          json['isArchived']?.toString().toLowerCase() == 'true' ||
+          json['isArchived'] == true ||
+          (json['isArchived'] is int && json['isArchived'] == 1),
       scheduledAt: json['scheduledAt'] != null
-          ? DateTime.parse(json['scheduledAt'])
+          ? DateTime.tryParse(json['scheduledAt'].toString())
           : null,
       expiresAt: json['expiresAt'] != null
-          ? DateTime.parse(json['expiresAt'])
+          ? DateTime.tryParse(json['expiresAt'].toString())
           : null,
-      createdBy: json['createdBy'],
-      relatedEntityId: json['relatedEntityId'],
-      relatedEntityType: json['relatedEntityType'],
-      createdAt: DateTime.parse(json['createdAt']),
-      updatedAt: DateTime.parse(json['updatedAt']),
-      readAt: json['readAt'] != null ? DateTime.parse(json['readAt']) : null,
+      createdBy: json['createdBy'] != null
+          ? int.tryParse(json['createdBy'].toString()) ?? 0
+          : 0,
+      relatedEntityId: json['relatedEntityId']?.toString(),
+      relatedEntityType: json['relatedEntityType']?.toString(),
+      createdAt: json['createdAt'] != null
+          ? DateTime.tryParse(json['createdAt'].toString()) ?? DateTime.now()
+          : DateTime.now(),
+      updatedAt: json['updatedAt'] != null
+          ? DateTime.tryParse(json['updatedAt'].toString()) ?? DateTime.now()
+          : DateTime.now(),
+      readAt: json['readAt'] != null
+          ? DateTime.tryParse(json['readAt'].toString())
+          : null,
       archivedAt: json['archivedAt'] != null
-          ? DateTime.parse(json['archivedAt'])
+          ? DateTime.tryParse(json['archivedAt'].toString())
           : null,
-      createdByUser: json['createdByUser'] != null
-          ? UserInfo.fromJson(json['createdByUser'])
+      createdByUser:
+          json['createdByUser'] != null && json['createdByUser'] is Map
+          ? UserInfo.fromJson(Map<String, dynamic>.from(json['createdByUser']))
           : null,
     );
   }
@@ -101,11 +121,22 @@ class NotificationModel {
       'updatedAt': updatedAt.toIso8601String(),
       'readAt': readAt?.toIso8601String(),
       'archivedAt': archivedAt?.toIso8601String(),
+      'createdByUser': createdByUser?.toJson(),
     };
   }
 
   static NotificationType _parseNotificationType(String type) {
-    switch (type) {
+    final typeStr = type.toUpperCase();
+
+    // Cek tipe yang ada di enum NotificationType
+    for (var value in NotificationType.values) {
+      if (value.toString().split('.').last == typeStr) {
+        return value;
+      }
+    }
+
+    // Fallback berdasarkan string
+    switch (typeStr) {
       case 'SYSTEM':
         return NotificationType.SYSTEM;
       case 'ANNOUNCEMENT':
@@ -129,12 +160,15 @@ class NotificationModel {
       case 'CUSTOM':
         return NotificationType.CUSTOM;
       default:
+        // Debug: print tipe yang tidak dikenali
+        print('⚠️ Unknown notification type: $typeStr');
         return NotificationType.SYSTEM;
     }
   }
 
+  // Helper methods
   IconData get iconData {
-    switch (icon) {
+    switch (icon?.toLowerCase()) {
       case 'announcement':
         return Icons.announcement;
       case 'warning':
@@ -153,6 +187,8 @@ class NotificationModel {
         return Icons.report;
       case 'profile':
         return Icons.person;
+      case 'check_circle':
+        return Icons.check_circle;
       default:
         return Icons.notifications;
     }
@@ -160,26 +196,32 @@ class NotificationModel {
 
   Color get color {
     if (iconColor != null && iconColor!.startsWith('#')) {
-      return Color(
-        int.parse(iconColor!.substring(1, 7), radix: 16) + 0xFF000000,
-      );
+      try {
+        final hexColor = iconColor!.replaceFirst('#', '');
+        return Color(int.parse('FF$hexColor', radix: 16));
+      } catch (e) {
+        print('⚠️ Error parsing color: $e');
+      }
     }
 
+    // Fallback colors based on type
     switch (type) {
       case NotificationType.ANNOUNCEMENT:
-        return Colors.blue;
+        return Colors.blue.shade700;
       case NotificationType.EMERGENCY:
-        return Colors.red;
-      case NotificationType.BILL:
         return Colors.red.shade700;
+      case NotificationType.BILL:
+        return Colors.orange.shade700;
       case NotificationType.PAYMENT:
-        return Colors.green;
+        return Colors.green.shade700;
       case NotificationType.REPORT:
-        return Colors.orange;
+        return Colors.amber.shade700;
       case NotificationType.SECURITY:
-        return Colors.purple;
+        return Colors.purple.shade700;
+      case NotificationType.COMMUNITY:
+        return Colors.teal.shade700;
       default:
-        return Colors.grey;
+        return Colors.grey.shade700;
     }
   }
 
@@ -190,14 +232,42 @@ class NotificationModel {
     if (difference.inSeconds < 60) {
       return 'Baru saja';
     } else if (difference.inMinutes < 60) {
-      return '${difference.inMinutes} menit lalu';
+      final minutes = difference.inMinutes;
+      return '$minutes ${minutes == 1 ? 'menit' : 'menit'} lalu';
     } else if (difference.inHours < 24) {
-      return '${difference.inHours} jam lalu';
+      final hours = difference.inHours;
+      return '$hours ${hours == 1 ? 'jam' : 'jam'} lalu';
     } else if (difference.inDays < 30) {
-      return '${difference.inDays} hari lalu';
+      final days = difference.inDays;
+      return '$days ${days == 1 ? 'hari' : 'hari'} lalu';
+    } else if (difference.inDays < 365) {
+      final months = (difference.inDays / 30).floor();
+      return '$months ${months == 1 ? 'bulan' : 'bulan'} lalu';
     } else {
-      return '${(difference.inDays / 30).floor()} bulan lalu';
+      final years = (difference.inDays / 365).floor();
+      return '$years ${years == 1 ? 'tahun' : 'tahun'} lalu';
     }
+  }
+
+  bool get isImportant {
+    return type == NotificationType.EMERGENCY ||
+        type == NotificationType.BILL ||
+        type == NotificationType.SECURITY;
+  }
+
+  bool get isExpired {
+    if (expiresAt == null) return false;
+    return DateTime.now().isAfter(expiresAt!);
+  }
+
+  bool get isScheduled {
+    if (scheduledAt == null) return false;
+    return DateTime.now().isBefore(scheduledAt!);
+  }
+
+  @override
+  String toString() {
+    return 'NotificationModel{id: $id, title: $title, type: $type, isRead: $isRead}';
   }
 }
 
@@ -230,10 +300,14 @@ class UserInfo {
 
   factory UserInfo.fromJson(Map<String, dynamic> json) {
     return UserInfo(
-      id: json['id'],
-      namaLengkap: json['namaLengkap'],
-      email: json['email'],
-      role: json['role'],
+      id: json['id'] != null ? int.tryParse(json['id'].toString()) ?? 0 : 0,
+      namaLengkap: json['namaLengkap']?.toString() ?? 'Unknown',
+      email: json['email']?.toString(),
+      role: json['role']?.toString(),
     );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {'id': id, 'namaLengkap': namaLengkap, 'email': email, 'role': role};
   }
 }

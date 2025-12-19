@@ -4,6 +4,14 @@
     <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" />
     <uses-permission android:name="android.permission.ACCESS_NETWORK_STATE" />
+    <uses-permission android:name="android.permission.ACCESS_FINE_LOCATION" />
+    <uses-permission android:name="android.permission.ACCESS_COARSE_LOCATION" />
+    <uses-permission android:name="android.permission.RECORD_AUDIO" />
+
+    <!-- Untuk Google Maps -->
+    <meta-data
+    android:name="com.google.android.geo.API_KEY"
+    android:value="AIzaSyD0IhuQXRtY-F5MQ2RTigIG6P5M5k65J_s" />
     <application
         android:label="warga_app"
         android:name="${applicationName}"

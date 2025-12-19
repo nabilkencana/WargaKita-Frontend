@@ -72,7 +72,17 @@ dependencies:
   
   # Validation
   email_validator: ^2.1.17
-  rive: ^0.14.0
+
+  # SOS & Map features
+  google_maps_flutter: ^2.2.3
+  geolocator: ^9.0.2
+  audioplayers: ^5.2.1
+  socket_io_client: ^3.1.3
+
+  # File handling
+  path: ^1.8.2
+  web_socket_channel: ^3.0.3
+  flutter_local_notifications: ^19.5.0
 
 dev_dependencies:
   flutter_test:

@@ -1,3 +1,7 @@
+# SET DART PATH MANUAL - TAMBAHKAN INI
+set(DART_EXECUTABLE "D:/tools/dart-sdk/dart-sdk/bin/dart.exe")
+message(STATUS "Dart path: ${DART_EXECUTABLE}")
+
 # Project-level configuration.
 cmake_minimum_required(VERSION 3.14)
 project(warga_app LANGUAGES CXX)
