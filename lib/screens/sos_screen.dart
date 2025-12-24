@@ -107,7 +107,13 @@ class _SosScreenState extends State<SosScreen> {
 
       final emergency = await _sosService.createSOS(request);
 
-      _showSuccessSnackbar('SOS Emergency berhasil dikirim!');
+      // Send alarm to security dashboard
+      try {
+        await _sosService.sendAlarmToSecurityDashboard(emergency);
+        _showSuccessSnackbar('SOS Emergency berhasil dikirim dan alarm terkirim!');
+      } catch (e) {
+        _showErrorSnackbar('SOS berhasil dikirim, tapi alarm gagal terkirim: $e');
+      }
 
       // Refresh data setelah mengirim SOS
       await _loadData();
