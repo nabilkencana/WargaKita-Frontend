@@ -33,6 +33,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   int _currentIndex = 0;
   final TextEditingController _searchController = TextEditingController();
   bool _isSearching = false;
+  
 
   // 🔄 UPDATE: Ganti dengan notifikasi real
   List<NotificationModel> _notifications = [];
@@ -71,7 +72,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadEverythingInBackground();
     });
-
   }
 
   Future<void> _initWebSocket() async {
@@ -91,43 +91,29 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       print('👤 Using user ID: $userId');
       print('📡 API URL: ${Config.apiUrl}');
 
-      // 2. Test connection terlebih dahulu
-      print('🧪 Testing WebSocket connection...');
-      final testResult = await _webSocketService.testConnection(userId);
-      print('🧪 Test result: ${testResult ? "✅ Success" : "❌ Failed"}');
-
-      if (!testResult) {
-        print('⚠️ WebSocket test failed, skipping connection');
-        return;
-      }
-
-      // 3. Setup callback
+      // 2. Setup callback SEBELUM connect
       _webSocketService.onNotificationReceived = (notification) {
-        print('📨 Notification received: ${notification['title']}');
+        print('📨 Notification received');
         _handleIncomingNotification(notification);
       };
 
       _webSocketService.onAnnouncementReceived = (announcement) {
-        print('📢 Announcement received: ${announcement['title']}');
+        print('📢 Announcement received');
         _handleIncomingAnnouncement(announcement);
       };
 
-      // 4. Connect
-      await _webSocketService.connect(userId);
+      // 3. Connect (TANPA await)
+      _webSocketService.connect(userId);
 
-      setState(() {
-      });
-
-      if (_webSocketService.isConnected) {
-        print('✅ WebSocket connected successfully');
-
-        // Kirim test message
-        Future.delayed(const Duration(seconds: 2), () {
+      // 4. Optional: tunggu sebentar lalu cek status
+      Future.delayed(const Duration(seconds: 2), () {
+        if (_webSocketService.isConnected) {
+          print('✅ WebSocket connected successfully');
           _sendTestPing();
-        });
-      } else {
-        print('⚠️ WebSocket connection failed');
-      }
+        } else {
+          print('⚠️ WebSocket still connecting...');
+        }
+      });
     } catch (e) {
       print('❌ Error initializing WebSocket: $e');
     }
@@ -144,42 +130,42 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   void _handleIncomingNotification(Map<String, dynamic> notification) {
+    print('📨 Handling incoming notification from WebSocket...');
+    print('📊 Notification keys: ${notification.keys.toList()}');
+    print('📊 Notification type: ${notification['type']}');
+    print('📊 Full notification: $notification');
 
-     print('📨 Handling incoming notification from WebSocket...');
-  print('📊 Notification keys: ${notification.keys.toList()}');
-  print('📊 Notification type: ${notification['type']}');
-  print('📊 Full notification: $notification');
+    try {
+      // Cek apakah ini notification langsung atau data dalam 'data' key
+      Map<String, dynamic> notificationData;
 
-  try {
-    // Cek apakah ini notification langsung atau data dalam 'data' key
-    Map<String, dynamic> notificationData;
-    
-    if (notification.containsKey('data') && notification['data'] is Map) {
-      // Format: {type: 'NEW_NOTIFICATION', data: {...}}
-      notificationData = Map<String, dynamic>.from(notification['data']);
-      print('📥 Using data from notification[\'data\']');
-    } else {
-      // Format: notification langsung
-      notificationData = Map<String, dynamic>.from(notification);
-      print('📥 Using direct notification data');
+      if (notification.containsKey('data') && notification['data'] is Map) {
+        // Format: {type: 'NEW_NOTIFICATION', data: {...}}
+        notificationData = Map<String, dynamic>.from(notification['data']);
+        print('📥 Using data from notification[\'data\']');
+      } else {
+        // Format: notification langsung
+        notificationData = Map<String, dynamic>.from(notification);
+        print('📥 Using direct notification data');
+      }
+
+      // Parse type
+      final notificationType = notificationData['type']?.toString() ?? 'SYSTEM';
+      print('📋 Parsed notification type: $notificationType');
+
+      // Handle berdasarkan type
+      if (notificationType == 'ANNOUNCEMENT' ||
+          notificationData['title']?.toString().contains('Pengumuman') ==
+              true) {
+        _handleAnnouncementNotification(notificationData);
+      } else {
+        _handleRegularNotification(notificationData);
+      }
+    } catch (e) {
+      print('❌ Error handling notification: $e');
+      print('❌ Stack trace: ${e.toString()}');
     }
 
-    // Parse type
-    final notificationType = notificationData['type']?.toString() ?? 'SYSTEM';
-    print('📋 Parsed notification type: $notificationType');
-
-    // Handle berdasarkan type
-    if (notificationType == 'ANNOUNCEMENT' || 
-        notificationData['title']?.toString().contains('Pengumuman') == true) {
-      _handleAnnouncementNotification(notificationData);
-    } else {
-      _handleRegularNotification(notificationData);
-    }
-  } catch (e) {
-    print('❌ Error handling notification: $e');
-    print('❌ Stack trace: ${e.toString()}');
-  }
-  
     // Cek jika notification sudah ada dalam list
     final exists = _notifications.any((n) => n.id == notification['id']);
 
@@ -557,7 +543,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     super.dispose();
   }
 
-// 🔄 TAMBAHKAN: Fungsi untuk otomatis menandai semua notifikasi sebagai dibaca saat modal dibuka
+  // 🔄 TAMBAHKAN: Fungsi untuk otomatis menandai semua notifikasi sebagai dibaca saat modal dibuka
   Future<void> _autoMarkAllNotificationsAsViewed() async {
     try {
       // Hanya tandai jika ada notifikasi yang belum dibaca
@@ -1439,9 +1425,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                 onTap: () {
                                   // Otomatis tandai sebagai dibaca saat diklik
                                   if (!notification.isRead) {
-                                    _markNotificationAsRead(
-                                      notification.id,
-                                    );
+                                    _markNotificationAsRead(notification.id);
                                   }
                                   _handleNotificationAction(notification);
                                 },

@@ -41,7 +41,7 @@ class NotificationService {
 
       print('📡 Notification response status: ${response.statusCode}');
 
-      if (response.statusCode == 200) {
+      if (response.statusCode.toString().startsWith('2')) {
         final List<dynamic> data = json.decode(response.body);
         print('✅ Successfully fetched ${data.length} notifications');
 
@@ -92,7 +92,7 @@ class NotificationService {
         },
       );
 
-      if (response.statusCode == 200) {
+      if (response.statusCode.toString().startsWith('2')) {
         final data = json.decode(response.body);
         final count = data['count'] ?? 0;
         print('📊 Unread notifications count: $count');
@@ -139,7 +139,7 @@ class NotificationService {
         body: body,
       );
 
-      if (response.statusCode == 200) {
+      if (response.statusCode.toString().startsWith('2')) {
         final data = json.decode(response.body);
         print('✅ Successfully marked notifications as read: ${data['count']}');
         return {'success': true, 'count': data['count'] ?? 0};
@@ -177,7 +177,7 @@ class NotificationService {
         },
       );
 
-      if (response.statusCode == 200) {
+      if (response.statusCode.toString().startsWith('2')) {
         final data = json.decode(response.body);
         final count = data['count'] ?? 0;
         print('✅ Successfully marked $count notifications as read');
@@ -216,7 +216,7 @@ class NotificationService {
         },
       );
 
-      if (response.statusCode == 200) {
+      if (response.statusCode.toString().startsWith('2')) {
         print('✅ Successfully archived notification');
         return true;
       } else if (response.statusCode == 401) {
@@ -256,7 +256,7 @@ class NotificationService {
         },
       );
 
-      if (response.statusCode == 200) {
+      if (response.statusCode.toString().startsWith('2')) {
         print('✅ Successfully deleted notification');
         return true;
       } else if (response.statusCode == 401) {
@@ -291,7 +291,7 @@ class NotificationService {
         },
       );
 
-      if (response.statusCode == 200) {
+      if (response.statusCode.toString().startsWith('2')) {
         final data = json.decode(response.body);
         print(
           '📊 Stats loaded: ${data['total']} total, ${data['unread']} unread',
@@ -569,7 +569,7 @@ class NotificationService {
         },
       );
 
-      if (response.statusCode == 200) {
+      if (response.statusCode.toString().startsWith('2')) {
         final data = json.decode(response.body);
         print('✅ WebSocket ping sent');
         return {'success': true, 'message': data['message']};
