@@ -2,10 +2,10 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import '../models/sos_model.dart';
+import '../config/config.dart';
 
 class SosService {
-  static const String baseUrl =
-      'https://wargakita.canadev.my.id'; 
+  static const String baseUrl = Config.apiUrl;
 
   final String _apiUrl = '$baseUrl/emergency';
 
@@ -253,5 +253,18 @@ class SosService {
     } catch (e) {
       throw Exception('Gagal mengambil statistik emergency: $e');
     }
+  }
+
+  // Send alarm to security dashboard
+  Future<void> sendAlarmToSecurityDashboard(Emergency emergency) async {
+    final String alarmUrl = baseUrl + Config.alarmEndpoint;
+
+    final response = await http.post(
+      Uri.parse(alarmUrl),
+      headers: _headers,
+      body: json.encode(emergency.toJson()),
+    );
+
+    _handleError(response);
   }
 }
