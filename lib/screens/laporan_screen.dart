@@ -791,6 +791,15 @@ class _LaporanScreenState extends State<LaporanScreen> {
 
   // laporan_screen.dart (UPDATE FUNGSI _submitLaporan)
   void _submitLaporan() async {
+    final int userId = widget.user.id is int
+        ? widget.user.id
+        : int.tryParse(widget.user.id.toString()) ?? 0;
+
+    if (userId == 0) {
+      _showErrorDialog('User ID tidak valid, silakan login ulang.');
+      return;
+    }
+
     if (!_formKey.currentState!.validate()) return;
 
     setState(() => _isLoading = true);
@@ -814,11 +823,12 @@ class _LaporanScreenState extends State<LaporanScreen> {
 
       // Tambahkan fields
       request.fields.addAll({
-        'title': _judulController.text,
-        'description': _deskripsiController.text,
+        'title': _judulController.text.trim(),
+        'description': _deskripsiController.text.trim(),
         'category': _selectedKategori,
-        'userId': widget.user.id.toString(),
+        'userId': userId.toString(), // 🔥 STRING OK karena ASALNYA INT
       });
+
 
       // Handle image upload dengan MIME type yang benar
       if (_imageFile != null || _imageBytes != null) {
@@ -841,12 +851,14 @@ class _LaporanScreenState extends State<LaporanScreen> {
         print('✅ Success! ID: ${responseData['id']}');
         print('📸 Image URL: ${responseData['imageUrl']}');
 
+        if (!mounted) return;
+
+        _clearForm();
+        
         _showSuccessDialog(
           imageUrl: responseData['imageUrl'],
           reportId: responseData['id']?.toString() ?? '-',
         );
-
-        _clearForm();
       } else {
         final errorData = jsonDecode(response.body);
         final errorMessage =

@@ -33,9 +33,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   int _currentIndex = 0;
   final TextEditingController _searchController = TextEditingController();
   bool _isSearching = false;
-  
 
   // 🔄 UPDATE: Ganti dengan notifikasi real
+  bool _popupOpen = false;
   List<NotificationModel> _notifications = [];
   int _unreadNotifications = 0;
   bool _isLoadingNotifications = false;
@@ -93,8 +93,19 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
       // 2. Setup callback SEBELUM connect
       _webSocketService.onNotificationReceived = (notification) {
-        print('📨 Notification received');
-        _handleIncomingNotification(notification);
+        if (!mounted) return;
+
+        final data = Map<String, dynamic>.from(notification);
+
+        // ✅ update data cepat
+        final notificationModel = NotificationModel.fromJson(data);
+
+        setState(() {
+          _notifications.insert(0, notificationModel);
+        });
+
+        // ✅ popup LANGSUNG (tanpa async)
+        _showRealtimeNotificationPopup(data);
       };
 
       _webSocketService.onAnnouncementReceived = (announcement) {
@@ -119,6 +130,36 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
+  void _showRealtimeNotificationPopup(Map<String, dynamic> notification) {
+    if (_popupOpen) return;
+
+    _popupOpen = true;
+
+    showDialog(
+      context: context,
+      barrierDismissible: true,
+      builder: (_) => AlertDialog(
+        title: Row(
+          children: const [
+            Icon(Icons.notifications_active, color: Colors.orange),
+            SizedBox(width: 8),
+            Text('Notifikasi Baru'),
+          ],
+        ),
+        content: Text(notification['title'] ?? 'Ada notifikasi baru'),
+        actions: [
+          TextButton(
+            onPressed: () {
+              Navigator.pop(context);
+              _popupOpen = false;
+            },
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
+  }
+
   void _sendTestPing() {
     try {
       // Kirim ping untuk test
@@ -126,287 +167,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       // Note: Anda perlu menambahkan method untuk send message ke WebSocketService
     } catch (e) {
       print('⚠️ Error sending ping: $e');
-    }
-  }
-
-  void _handleIncomingNotification(Map<String, dynamic> notification) {
-    print('📨 Handling incoming notification from WebSocket...');
-    print('📊 Notification keys: ${notification.keys.toList()}');
-    print('📊 Notification type: ${notification['type']}');
-    print('📊 Full notification: $notification');
-
-    try {
-      // Cek apakah ini notification langsung atau data dalam 'data' key
-      Map<String, dynamic> notificationData;
-
-      if (notification.containsKey('data') && notification['data'] is Map) {
-        // Format: {type: 'NEW_NOTIFICATION', data: {...}}
-        notificationData = Map<String, dynamic>.from(notification['data']);
-        print('📥 Using data from notification[\'data\']');
-      } else {
-        // Format: notification langsung
-        notificationData = Map<String, dynamic>.from(notification);
-        print('📥 Using direct notification data');
-      }
-
-      // Parse type
-      final notificationType = notificationData['type']?.toString() ?? 'SYSTEM';
-      print('📋 Parsed notification type: $notificationType');
-
-      // Handle berdasarkan type
-      if (notificationType == 'ANNOUNCEMENT' ||
-          notificationData['title']?.toString().contains('Pengumuman') ==
-              true) {
-        _handleAnnouncementNotification(notificationData);
-      } else {
-        _handleRegularNotification(notificationData);
-      }
-    } catch (e) {
-      print('❌ Error handling notification: $e');
-      print('❌ Stack trace: ${e.toString()}');
-    }
-
-    // Cek jika notification sudah ada dalam list
-    final exists = _notifications.any((n) => n.id == notification['id']);
-
-    if (!exists) {
-      setState(() {
-        // Parse notification data sesuai dengan model Anda
-        final notificationModel = NotificationModel(
-          id:
-              notification['id']?.toString() ??
-              DateTime.now().millisecondsSinceEpoch.toString(),
-          userId:
-              int.tryParse(notification['userId']?.toString() ?? '0') ??
-              widget.user.id as int,
-          type: _parseNotificationType(
-            notification['type']?.toString() ?? 'SYSTEM',
-          ),
-          title: notification['title']?.toString() ?? 'Notifikasi Baru',
-          message: notification['message']?.toString() ?? '',
-          icon: notification['icon']?.toString(),
-          iconColor: notification['iconColor']?.toString(),
-          data: notification['data'] != null && notification['data'] is Map
-              ? Map<String, dynamic>.from(notification['data'])
-              : null,
-          isRead: false,
-          isArchived: false,
-          createdAt: DateTime.now(),
-          updatedAt: DateTime.now(),
-          createdBy:
-              int.tryParse(notification['createdBy']?.toString() ?? '0') ?? 0,
-        );
-
-        _notifications.insert(0, notificationModel);
-        _unreadNotifications++;
-
-        // Tampilkan snackbar atau local notification
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.notifications, color: Colors.white, size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Text(
-                    'Notifikasi baru: ${notification['title']}',
-                    style: const TextStyle(color: Colors.white),
-                  ),
-                ),
-              ],
-            ),
-            backgroundColor: Colors.blue.shade700,
-            duration: const Duration(seconds: 3),
-            action: SnackBarAction(
-              label: 'Lihat',
-              textColor: Colors.white,
-              onPressed: () {
-                _showNotifications();
-              },
-            ),
-          ),
-        );
-      });
-    }
-  }
-
-  void _handleAnnouncementNotification(Map<String, dynamic> notificationData) {
-    print('📢 Handling announcement notification...');
-
-    try {
-      // Buat NotificationModel dari data WebSocket
-      final notificationModel = NotificationModel(
-        id:
-            notificationData['id']?.toString() ??
-            'ws_${DateTime.now().millisecondsSinceEpoch}',
-        userId:
-            int.tryParse(notificationData['userId']?.toString() ?? '0') ??
-            _currentUser.id,
-        type: _parseNotificationType(
-          notificationData['type']?.toString() ?? 'ANNOUNCEMENT',
-        ),
-        title: notificationData['title']?.toString() ?? 'Pengumuman Baru',
-        message: notificationData['message']?.toString() ?? '',
-        icon: notificationData['icon']?.toString() ?? 'announcement',
-        iconColor: notificationData['iconColor']?.toString() ?? '#3B82F6',
-        data:
-            notificationData['data'] != null && notificationData['data'] is Map
-            ? Map<String, dynamic>.from(notificationData['data'])
-            : {
-                'announcementId': notificationData['announcementId'] ?? 0,
-                'action': 'view_announcement',
-                'timestamp': DateTime.now().toIso8601String(),
-              },
-        isRead: false,
-        isArchived: false,
-        createdAt: notificationData['createdAt'] != null
-            ? DateTime.tryParse(notificationData['createdAt'].toString()) ??
-                  DateTime.now()
-            : DateTime.now(),
-        updatedAt: DateTime.now(),
-        createdBy:
-            int.tryParse(notificationData['createdBy']?.toString() ?? '0') ?? 0,
-      );
-
-      print('✅ Created notification model: ${notificationModel.title}');
-
-      if (mounted) {
-        setState(() {
-          // Cek duplikat
-          final exists = _notifications.any(
-            (n) => n.id == notificationModel.id,
-          );
-          if (!exists) {
-            _notifications.insert(0, notificationModel);
-            _unreadNotifications++;
-            print(
-              '✅ Added to notifications list. Total: ${_notifications.length}',
-            );
-          } else {
-            print('⚠️ Notification already exists, skipping');
-          }
-        });
-      }
-
-      // Tampilkan snackbar
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.announcement, color: Colors.white, size: 20),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        '📢 Pengumuman Baru',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                      ),
-                      Text(
-                        notificationModel.title,
-                        style: TextStyle(color: Colors.white, fontSize: 12),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
-            backgroundColor: Colors.blue.shade800,
-            duration: const Duration(seconds: 4),
-            action: SnackBarAction(
-              label: 'Lihat',
-              textColor: Colors.white,
-              onPressed: () {
-                _showNotifications();
-              },
-            ),
-            behavior: SnackBarBehavior.floating,
-            shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(10),
-            ),
-          ),
-        );
-      }
-
-      // Refresh announcements
-      _refreshAnnouncements();
-    } catch (e) {
-      print('❌ Error creating announcement notification: $e');
-    }
-  }
-
-  void _handleRegularNotification(Map<String, dynamic> notificationData) {
-    print('🔔 Handling regular notification...');
-
-    try {
-      // Buat NotificationModel
-      final notificationModel = NotificationModel(
-        id:
-            notificationData['id']?.toString() ??
-            'ws_${DateTime.now().millisecondsSinceEpoch}',
-        userId:
-            int.tryParse(notificationData['userId']?.toString() ?? '0') ??
-            _currentUser.id,
-        type: _parseNotificationType(
-          notificationData['type']?.toString() ?? 'SYSTEM',
-        ),
-        title: notificationData['title']?.toString() ?? 'Notifikasi Baru',
-        message: notificationData['message']?.toString() ?? '',
-        icon: notificationData['icon']?.toString(),
-        iconColor: notificationData['iconColor']?.toString(),
-        data:
-            notificationData['data'] != null && notificationData['data'] is Map
-            ? Map<String, dynamic>.from(notificationData['data'])
-            : null,
-        isRead: false,
-        isArchived: false,
-        createdAt: notificationData['createdAt'] != null
-            ? DateTime.tryParse(notificationData['createdAt'].toString()) ??
-                  DateTime.now()
-            : DateTime.now(),
-        updatedAt: DateTime.now(),
-        createdBy:
-            int.tryParse(notificationData['createdBy']?.toString() ?? '0') ?? 0,
-      );
-
-      if (mounted) {
-        setState(() {
-          final exists = _notifications.any(
-            (n) => n.id == notificationModel.id,
-          );
-          if (!exists) {
-            _notifications.insert(0, notificationModel);
-            _unreadNotifications++;
-          }
-        });
-      }
-
-      // Tampilkan snackbar untuk notifikasi penting
-      if (notificationModel.type == NotificationType.EMERGENCY) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Row(
-              children: [
-                Icon(Icons.warning, color: Colors.white),
-                const SizedBox(width: 8),
-                Expanded(child: Text('🚨 ${notificationModel.title}')),
-              ],
-            ),
-            backgroundColor: Colors.red,
-            duration: const Duration(seconds: 5),
-          ),
-        );
-      }
-    } catch (e) {
-      print('❌ Error creating regular notification: $e');
     }
   }
 
@@ -477,25 +237,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
     // Auto refresh announcements
     _refreshAnnouncements();
-  }
-
-  NotificationType _parseNotificationType(String type) {
-    switch (type) {
-      case 'ANNOUNCEMENT':
-        return NotificationType.ANNOUNCEMENT;
-      case 'EMERGENCY':
-        return NotificationType.EMERGENCY;
-      case 'BILL':
-        return NotificationType.BILL;
-      case 'PAYMENT':
-        return NotificationType.PAYMENT;
-      case 'REPORT':
-        return NotificationType.REPORT;
-      case 'COMMUNITY':
-        return NotificationType.COMMUNITY;
-      default:
-        return NotificationType.SYSTEM;
-    }
   }
 
   @override
@@ -1257,11 +998,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   // 🔄 UPDATE: Fungsi untuk show notifications dengan auto-mark-as-read
-  void _showNotifications() async {
-    // Refresh notifikasi sebelum menampilkan
-    await _loadNotifications();
-
-    await _autoMarkAllNotificationsAsViewed();
+  void _showNotifications() {
+    // 🚀 JANGAN await — refresh di background
+    Future.microtask(() {
+      _loadNotifications();
+      _autoMarkAllNotificationsAsViewed();
+    });
 
     showModalBottomSheet(
       context: context,
@@ -1279,7 +1021,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ),
           child: Column(
             children: [
-              // Header dengan tombol Tandai Semua
+              // ================= HEADER =================
               Container(
                 padding: const EdgeInsets.all(16),
                 decoration: BoxDecoration(
@@ -1309,12 +1051,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     ),
                     const Spacer(),
 
-                    // TOMBOL TANDAI SEMUA JIKA ADA NOTIF BARU
                     if (_unreadNotifications > 0)
                       GestureDetector(
-                        onTap: () async {
-                          await _markAllNotificationsAsRead();
-                          // Refresh UI setelah menandai semua
+                        onTap: () {
+                          // UI update DULU
                           setState(() {
                             _unreadNotifications = 0;
                             _notifications = _notifications.map((notif) {
@@ -1323,6 +1063,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                 readAt: DateTime.now(),
                               );
                             }).toList();
+                          });
+
+                          // API BELAKANGAN
+                          Future.microtask(() {
+                            _markAllNotificationsAsRead();
                           });
                         },
                         child: Container(
@@ -1335,16 +1080,16 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                             borderRadius: BorderRadius.circular(12),
                           ),
                           child: Row(
-                            children: [
+                            children: const [
                               Icon(
                                 Icons.done_all_rounded,
                                 color: Colors.white,
                                 size: 16,
                               ),
-                              const SizedBox(width: 6),
+                              SizedBox(width: 6),
                               Text(
                                 'Tandai Semua',
-                                style: const TextStyle(
+                                style: TextStyle(
                                   color: Colors.white,
                                   fontSize: 12,
                                   fontWeight: FontWeight.w600,
@@ -1358,58 +1103,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 ),
               ),
 
-              // 🔄 TAMBAHKAN: Tombol cepat di bawah header
-              if (_unreadNotifications > 0)
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(color: Colors.blue.shade50),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        '$_unreadNotifications notifikasi belum dibaca',
-                        style: TextStyle(
-                          color: Colors.blue.shade700,
-                          fontSize: 13,
-                          fontWeight: FontWeight.w500,
-                        ),
-                      ),
-                      InkWell(
-                        onTap: () async {
-                          await _markAllNotificationsAsRead();
-                          setState(() {
-                            _unreadNotifications = 0;
-                          });
-                        },
-                        child: Row(
-                          children: [
-                            Icon(
-                              Icons.done_all,
-                              color: Colors.blue.shade700,
-                              size: 16,
-                            ),
-                            const SizedBox(width: 4),
-                            Text(
-                              'Tandai semua',
-                              style: TextStyle(
-                                color: Colors.blue.shade700,
-                                fontSize: 13,
-                                fontWeight: FontWeight.w600,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-
+              // ================= LIST =================
               Expanded(
                 child: _isLoadingNotifications
-                    ? Center(child: CircularProgressIndicator())
+                    ? const Center(child: CircularProgressIndicator())
                     : _notifications.isEmpty
                     ? _buildEmptyNotifications()
                     : ListView.builder(
@@ -1417,17 +1114,24 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                         itemCount: _notifications.length,
                         itemBuilder: (context, index) {
                           final notification = _notifications[index];
+
                           return Column(
                             children: [
-                              // 🔄 UPDATE: Auto-mark-as-read saat diklik
                               _buildNotificationItem(
                                 notification,
                                 onTap: () {
-                                  // Otomatis tandai sebagai dibaca saat diklik
-                                  if (!notification.isRead) {
-                                    _markNotificationAsRead(notification.id);
-                                  }
+                                  // 🚀 TUTUP MODAL DULU
+                                  Navigator.pop(context);
+
+                                  // 🚀 NAVIGASI INSTAN
                                   _handleNotificationAction(notification);
+
+                                  // 🔄 BACKGROUND TASK
+                                  if (!notification.isRead) {
+                                    Future.microtask(() {
+                                      _markNotificationAsRead(notification.id);
+                                    });
+                                  }
                                 },
                               ),
                               const SizedBox(height: 12),
@@ -1441,10 +1145,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         );
       },
     ).then((_) {
-      // 🔄 UPDATE: Otomatis refresh setelah modal ditutup
-      _loadNotifications();
+      // refresh ringan, non-blocking
+      Future.microtask(() {
+        _loadNotifications();
+      });
     });
   }
+
 
   // 🔄 UPDATE: Widget notification item dengan callback onTap
   Widget _buildNotificationItem(

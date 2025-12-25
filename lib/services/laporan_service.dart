@@ -124,7 +124,7 @@ class LaporanService {
       print('📥 Response Status: ${response.statusCode}');
       print('📥 Response Body length: ${response.body.length}');
 
-      if (response.statusCode == 200) {
+      if (response.statusCode.toString().startsWith('2')) {
         final data = json.decode(response.body);
         print('📊 Response data keys: ${data.keys}');
 
