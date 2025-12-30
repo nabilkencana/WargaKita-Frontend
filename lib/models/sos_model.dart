@@ -32,21 +32,25 @@ class Emergency {
 
   factory Emergency.fromJson(Map<String, dynamic> json) {
     return Emergency(
-      id: json['id'] as int,
-      type: json['type'] as String,
-      details: json['details'] as String?,
-      location: json['location'] as String?,
-      latitude: json['latitude'] as String?,
-      longitude: json['longitude'] as String?,
-      needVolunteer: json['needVolunteer'] as bool? ?? false,
-      volunteerCount: (json['volunteerCount'] as int?) ?? 0,
-      status: json['status'] as String,
-      userId: json['userId'] as int?,
-      createdAt: DateTime.parse(json['createdAt'] as String),
-      updatedAt: DateTime.parse(json['updatedAt'] as String),
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      type: json['type'] ?? '',
+      details: json['details'],
+      location: json['location'],
+      latitude: json['latitude'],
+      longitude: json['longitude'],
+      needVolunteer: json['needVolunteer'] ?? false,
+      volunteerCount: (json['volunteerCount'] as num?)?.toInt() ?? 0,
+      status: json['status'] ?? 'active',
+      userId: (json['userId'] as num?)?.toInt(),
+      createdAt: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'])
+          : DateTime.now(),
+      updatedAt: json['updatedAt'] != null
+          ? DateTime.parse(json['updatedAt'])
+          : DateTime.now(),
       volunteers:
-          (json['volunteers'] as List<dynamic>?)
-              ?.map((v) => Volunteer.fromJson(v as Map<String, dynamic>))
+          (json['volunteers'] as List?)
+              ?.map((v) => Volunteer.fromJson(v))
               .toList() ??
           [],
     );
@@ -91,17 +95,22 @@ class Volunteer {
 
   factory Volunteer.fromJson(Map<String, dynamic> json) {
     return Volunteer(
-      id: json['id'] as int,
-      emergencyId: json['emergencyId'] as int,
-      userId: json['userId'] as int?,
-      userName: json['userName'] as String?,
-      userPhone: json['userPhone'] as String?,
-      skills: json['skills'] as String?,
-      status: json['status'] as String,
-      createdAt: DateTime.parse(json['createdAt'] as String),
-      updatedAt: DateTime.parse(json['updatedAt'] as String),
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      emergencyId: (json['emergencyId'] as num?)?.toInt() ?? 0,
+      userId: (json['userId'] as num?)?.toInt(),
+      userName: json['userName'],
+      userPhone: json['userPhone'],
+      skills: json['skills'],
+      status: json['status'] ?? 'pending',
+      createdAt: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'])
+          : DateTime.now(),
+      updatedAt: json['updatedAt'] != null
+          ? DateTime.parse(json['updatedAt'])
+          : DateTime.now(),
     );
   }
+
 
   Map<String, dynamic> toJson() {
     return {

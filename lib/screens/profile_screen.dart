@@ -1,8 +1,14 @@
 // profile_screen.dart
 import 'dart:io';
+import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:local_auth/local_auth.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:printing/printing.dart';
+import 'package:share_plus/share_plus.dart';
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:warga_app/screens/login_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/user_model.dart';
@@ -25,10 +31,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
   bool _isUpdatingProfile = false;
   bool _isUploadingKK = false; // Tambahkan ini
 
+  //Untuk Helper gambar
+  double _currentScale = 1.0;
+  double _currentRotation = 0.0;
+  DateTime _lastAccessed = DateTime.now();
+
+  // Untuk Helper security setting
+  String _currentLanguage = 'id';
+
   @override
   void initState() {
     super.initState();
     _currentUser = widget.user;
+    _loadSecuritySettings();
 
     // Langsung set KK status null atau fallback
     _kkStatus = null;
@@ -36,6 +51,13 @@ class _ProfileScreenState extends State<ProfileScreen> {
     // Load data di background tanpa blocking UI
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _loadUserDataInBackground();
+    });
+  }
+
+  Future<void> _loadSecuritySettings() async {
+    final prefs = await SharedPreferences.getInstance();
+    setState(() {
+      _currentLanguage = prefs.getString('language') ?? 'id';
     });
   }
 
@@ -1161,8 +1183,7 @@ Mohon ditindaklanjuti.
                       } else if (value == 'info') {
                         _showDocumentInfo(context, kkUrl);
                       } else if (value == 'rotate') {
-                        // Implement rotate functionality
-                        _showSuccessSnackbar('Rotate fitur akan datang');
+                        _rotateImage();
                       }
                     },
                     itemBuilder: (context) => [
@@ -1327,10 +1348,7 @@ Mohon ditindaklanjuti.
                                           size: 20,
                                         ),
                                       ),
-                                      onPressed: () {
-                                        // Implement zoom out
-                                        _showSuccessSnackbar('Zoom out');
-                                      },
+                                      onPressed: _zoomOut,
                                     ),
                                     const SizedBox(width: 8),
                                     Container(
@@ -1365,10 +1383,7 @@ Mohon ditindaklanjuti.
                                           size: 20,
                                         ),
                                       ),
-                                      onPressed: () {
-                                        // Implement zoom in
-                                        _showSuccessSnackbar('Zoom in');
-                                      },
+                                      onPressed: _zoomIn,
                                     ),
                                   ],
                                 ),
@@ -1506,148 +1521,43 @@ Mohon ditindaklanjuti.
   Widget _buildImageViewer(String url) {
     return InteractiveViewer(
       minScale: 0.5,
-      maxScale: 3.0,
-      child: Center(
-        child: Image.network(
-          url,
-          fit: BoxFit.contain,
-          loadingBuilder: (context, child, loadingProgress) {
-            if (loadingProgress == null) return child;
-            return Container(
-              width: 200,
-              height: 200,
-              decoration: BoxDecoration(
-                color: Colors.grey.shade800,
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator.adaptive(
-                    value: loadingProgress.expectedTotalBytes != null
-                        ? loadingProgress.cumulativeBytesLoaded /
-                              loadingProgress.expectedTotalBytes!
-                        : null,
-                    backgroundColor: Colors.grey.shade700,
-                    valueColor: AlwaysStoppedAnimation<Color>(
-                      Colors.blue.shade400,
-                    ),
-                  ),
-                  const SizedBox(height: 16),
-                  if (loadingProgress.expectedTotalBytes != null)
-                    Text(
-                      '${(loadingProgress.cumulativeBytesLoaded / 1024 / 1024).toStringAsFixed(1)} MB / '
-                      '${(loadingProgress.expectedTotalBytes! / 1024 / 1024).toStringAsFixed(1)} MB',
-                      style: const TextStyle(color: Colors.white, fontSize: 12),
-                    ),
-                  const SizedBox(height: 8),
-                  Text(
-                    'Memuat dokumen...',
-                    style: TextStyle(color: Colors.grey.shade400, fontSize: 12),
-                  ),
-                ],
-              ),
-            );
-          },
-          errorBuilder: (context, error, stackTrace) {
-            return Container(
-              width: double.infinity,
-              height: 300,
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [Colors.grey.shade800, Colors.grey.shade900],
-                ),
-                borderRadius: BorderRadius.circular(12),
-              ),
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Container(
-                    width: 80,
-                    height: 80,
-                    decoration: BoxDecoration(
-                      color: Colors.red.shade900.withOpacity(0.2),
-                      shape: BoxShape.circle,
-                    ),
-                    child: Icon(
-                      Icons.error_outline_rounded,
-                      color: Colors.red.shade400,
-                      size: 40,
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  const Text(
-                    'Gagal Memuat Dokumen',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 40),
-                    child: Text(
-                      'Dokumen tidak dapat dimuat. Silakan coba lagi atau hubungi administrator.',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.grey.shade400,
-                        fontSize: 14,
-                        height: 1.5,
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 20),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      ElevatedButton.icon(
-                        onPressed: () {
-                          // Retry loading
-                          Navigator.pop(context);
-                          _viewKKDocument(context);
-                        },
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.blue.shade600,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 12,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                        icon: const Icon(Icons.refresh_rounded, size: 18),
-                        label: const Text('Coba Lagi'),
-                      ),
-                      const SizedBox(width: 12),
-                      OutlinedButton.icon(
-                        onPressed: () => Navigator.pop(context),
-                        style: OutlinedButton.styleFrom(
-                          side: BorderSide(color: Colors.grey.shade600),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 20,
-                            vertical: 12,
-                          ),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(10),
-                          ),
-                        ),
-                        icon: const Icon(Icons.arrow_back_rounded, size: 18),
-                        label: const Text('Kembali'),
-                      ),
-                    ],
-                  ),
-                ],
-              ),
-            );
-          },
+      maxScale: 5.0,
+      scaleEnabled: true,
+      child: Transform.rotate(
+        angle: _currentRotation,
+        child: Transform.scale(
+          scale: _currentScale,
+          child: Image.network(
+            url,
+            fit: BoxFit.contain,
+            loadingBuilder: (context, child, progress) {
+              if (progress == null) return child;
+              return const Center(child: CircularProgressIndicator());
+            },
+            errorBuilder: (_, __, ___) =>
+                const Icon(Icons.broken_image, color: Colors.white),
+          ),
         ),
       ),
     );
+  }
+
+  void _zoomIn() {
+    setState(() {
+      _currentScale = (_currentScale + 0.2).clamp(0.5, 5.0);
+    });
+  }
+
+  void _zoomOut() {
+    setState(() {
+      _currentScale = (_currentScale - 0.2).clamp(0.5, 5.0);
+    });
+  }
+
+  void _rotateImage() {
+    setState(() {
+      _currentRotation += 1.5708; // 90 derajat
+    });
   }
 
   // Helper method untuk mendapatkan info file size
@@ -1667,28 +1577,30 @@ Mohon ditindaklanjuti.
   // Helper method untuk format waktu
   String _formatLastAccessTime() {
     final now = DateTime.now();
-    return '${now.day}/${now.month}/${now.year} ${now.hour}:${now.minute.toString().padLeft(2, '0')}';
+    final diff = now.difference(_lastAccessed);
+
+    if (diff.inMinutes < 1) return 'Baru saja';
+    if (diff.inMinutes < 60) return '${diff.inMinutes} menit lalu';
+    return '${diff.inHours} jam lalu';
   }
 
-  // Tambahkan fungsi-fungsi helper ini di class yang sama:
-
-  Future<void> _shareKKDocument(String url) async {
-    try {
-      // Implement share functionality
-      if (await canLaunchUrl(Uri.parse(url))) {
-        await launchUrl(Uri.parse(url));
-      } else {
-        _showSuccessSnackbar('Berhasil membagikan dokumen');
-      }
-    } catch (e) {
-      print('❌ Error sharing document: $e');
-      _showErrorSnackbar('Gagal membagikan dokumen');
-    }
+  void _shareKKDocument(String url) {
+    Share.share('Dokumen KK saya:\n$url', subject: 'Dokumen Kartu Keluarga');
   }
 
   Future<void> _printKKDocument(String url) async {
-    // Implement print functionality
-    _showSuccessSnackbar('Mempersiapkan dokumen untuk dicetak...');
+    try {
+      final response = await Dio().get<List<int>>(
+        url,
+        options: Options(responseType: ResponseType.bytes),
+      );
+
+      final Uint8List pdfBytes = Uint8List.fromList(response.data!);
+
+      await Printing.layoutPdf(onLayout: (_) async => pdfBytes);
+    } catch (e) {
+      _showErrorSnackbar('Gagal mencetak dokumen');
+    }
   }
 
   void _showDocumentInfo(BuildContext context, String url) {
@@ -1794,18 +1706,15 @@ Mohon ditindaklanjuti.
 
   Future<void> _downloadKKDocument(String url) async {
     try {
-      // Implementasi download menggunakan package flutter_downloader atau lainnya
-      _showSuccessSnackbar('Memulai download dokumen KK...');
+      final dir = await getExternalStorageDirectory();
+      final filePath =
+          '${dir!.path}/kk_${DateTime.now().millisecondsSinceEpoch}.pdf';
 
-      // Contoh sederhana dengan package url_launcher
-      if (await canLaunchUrl(Uri.parse(url))) {
-        await launchUrl(Uri.parse(url));
-      } else {
-        _showErrorSnackbar('Tidak dapat membuka dokumen');
-      }
+      await Dio().download(url, filePath);
+
+      _showSuccessSnackbar('Dokumen berhasil diunduh');
     } catch (e) {
-      print('❌ Error downloading KK document: $e');
-      _showErrorSnackbar('Gagal mendownload dokumen');
+      _showErrorSnackbar('Gagal download dokumen');
     }
   }
 
@@ -2849,181 +2758,609 @@ Mohon ditindaklanjuti.
     );
   }
 
-  void _toggleBiometricAuth(bool value) {
-    // Implement biometric auth toggle
+  Future<void> _toggleBiometricAuth(bool value) async {
+    final auth = LocalAuthentication();
+    final prefs = await SharedPreferences.getInstance();
+
+    try {
+      final canCheck = await auth.canCheckBiometrics;
+      if (!canCheck) {
+        _showErrorSnackbar('Perangkat tidak mendukung biometrik');
+        return;
+      }
+
+      final authenticated = await auth.authenticate(
+        localizedReason: 'Verifikasi biometrik untuk keamanan',
+      );
+
+      if (authenticated) {
+        await prefs.setBool('biometric', value);
+        _showSuccessSnackbar(
+          value ? 'Biometrik diaktifkan' : 'Biometrik dimatikan',
+        );
+      }
+    } catch (e) {
+      _showErrorSnackbar('Autentikasi biometrik gagal');
+    }
+  }
+
+
+
+  Future<void> _toggleTwoFactorAuth(bool value) async {
+    final prefs = await SharedPreferences.getInstance();
+
+    if (value) {
+      final confirmed = await _showOtpConfirmation();
+      if (!confirmed) return;
+    }
+
+    await prefs.setBool('2fa', value);
+
     _showSuccessSnackbar(
-      'Autentikasi biometrik ${value ? 'diaktifkan' : 'dinonaktifkan'}',
+      value
+          ? 'Verifikasi 2 Langkah diaktifkan'
+          : 'Verifikasi 2 Langkah dimatikan',
     );
   }
 
-  void _toggleTwoFactorAuth(bool value) {
-    // Implement two-factor auth toggle
-    _showSuccessSnackbar(
-      'Verifikasi 2 langkah ${value ? 'diaktifkan' : 'dinonaktifkan'}',
-    );
+  Future<bool> _showOtpConfirmation() async {
+    return await showDialog<bool>(
+          context: context,
+          builder: (_) => AlertDialog(
+            title: const Text('Aktifkan Verifikasi 2 Langkah'),
+            content: const Text(
+              'Kode OTP akan dikirim setiap login untuk keamanan tambahan.',
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.pop(context, false),
+                child: const Text('Batal'),
+              ),
+              ElevatedButton(
+                onPressed: () => Navigator.pop(context, true),
+                child: const Text('Aktifkan'),
+              ),
+            ],
+          ),
+        ) ??
+        false;
   }
 
   void _showLanguageSettings(BuildContext context) {
-    showDialog(
+    showModalBottomSheet(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Pilih Bahasa'),
-        content: Column(
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (_) {
+        return Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            _buildLanguageOption('Indonesia', 'id', '🇮🇩'),
-            const SizedBox(height: 12),
-            _buildLanguageOption('English', 'en', '🇺🇸'),
+            _languageTile('🇮🇩 Bahasa Indonesia', 'id'),
+            _languageTile('🇺🇸 English', 'en'),
           ],
-        ),
-      ),
+        );
+      },
     );
   }
 
-  Widget _buildLanguageOption(String name, String code, String flag) {
+  Widget _languageTile(String title, String code) {
     return ListTile(
-      leading: Text(flag, style: const TextStyle(fontSize: 24)),
-      title: Text(name),
-      trailing: _currentUser.language == code
-          ? Icon(Icons.check, color: Colors.blue.shade600)
+      title: Text(title),
+      trailing: _currentLanguage == code
+          ? const Icon(Icons.check, color: Colors.green)
           : null,
-      onTap: () {
-        // Update language
-        _showSuccessSnackbar('Bahasa diubah ke $name');
+      onTap: () async {
+        final prefs = await SharedPreferences.getInstance();
+        await prefs.setString('language', code);
+
+        setState(() => _currentLanguage = code);
         Navigator.pop(context);
+
+        _showSuccessSnackbar('Bahasa berhasil diubah');
       },
     );
   }
 
   void _showKKStatusDetail(BuildContext context) {
+    // Validasi data KK status
     if (_kkStatus == null || _kkStatus!.isEmpty) {
-      _showErrorSnackbar('Data status KK tidak tersedia');
+      _showErrorSnackbar('📄 Data status KK tidak tersedia');
       return;
     }
 
+    // Ekstrak data dengan null safety
     final status =
-        _kkStatus?['kkVerificationStatus']?.toString() ?? 'not_uploaded';
+        _kkStatus?['kkVerificationStatus']?.toString().toLowerCase() ??
+        'not_uploaded';
     final rejectionReason = _kkStatus?['kkRejectionReason']?.toString();
     final verifiedAt = _kkStatus?['kkVerifiedAt']?.toString();
-    _kkStatus?['kkVerifiedBy']?.toString();
+    final verifiedBy = _kkStatus?['verifiedBy']?.toString();
+    final uploadedAt = _kkStatus?['kkUploadedAt']?.toString();
 
+    // UI yang lebih modern dan informatif
     showDialog(
       context: context,
-      builder: (context) => AlertDialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: const Text('Detail Verifikasi KK'),
-        content: SingleChildScrollView(
+      barrierDismissible: true,
+      builder: (context) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        elevation: 8,
+        shadowColor: Colors.black.withOpacity(0.2),
+        insetPadding: const EdgeInsets.all(20),
+        child: Container(
+          constraints: const BoxConstraints(maxWidth: 500),
           child: Column(
             mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              _buildKKDetailItem(
-                'Status',
-                _getKKStatusText(status),
-                color: _getStatusColor(status),
+              // HEADER DENGAN GRADIENT
+              Container(
+                padding: const EdgeInsets.symmetric(
+                  vertical: 24,
+                  horizontal: 20,
+                ),
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    colors: [
+                      _getStatusColor(status).withOpacity(0.9),
+                      _getStatusColor(status).withOpacity(0.7),
+                    ],
+                    begin: Alignment.topLeft,
+                    end: Alignment.bottomRight,
+                  ),
+                  borderRadius: const BorderRadius.only(
+                    topLeft: Radius.circular(24),
+                    topRight: Radius.circular(24),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withOpacity(0.2),
+                        shape: BoxShape.circle,
+                      ),
+                      child: _getStatusIcon(status),
+                    ),
+                    const SizedBox(width: 16),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Detail Verifikasi KK',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.bold,
+                              color: Colors.white,
+                              letterSpacing: 0.5,
+                            ),
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            'Status: ${_getKKStatusText(status)}',
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.white.withOpacity(0.9),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
               ),
 
-              if (verifiedAt != null && verifiedAt.isNotEmpty)
-                _buildKKDetailItem(
-                  'Diverifikasi pada',
-                  _formatDateTime(verifiedAt),
-                ),
-
-              if (rejectionReason != null && rejectionReason.isNotEmpty)
-                _buildKKDetailItem(
-                  'Alasan Penolakan',
-                  rejectionReason,
-                  color: Colors.red.shade600,
-                ),
-
-              // Tambahkan petunjuk berdasarkan status
-              if (status == 'not_uploaded') ...[
-                const SizedBox(height: 16),
-                Container(
-                  padding: const EdgeInsets.all(12),
-                  decoration: BoxDecoration(
-                    color: Colors.blue.shade50,
-                    borderRadius: BorderRadius.circular(8),
-                  ),
-                  child: Row(
+              // CONTENT AREA
+              Expanded(
+                child: SingleChildScrollView(
+                  physics: const BouncingScrollPhysics(),
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Icon(Icons.info, color: Colors.blue.shade600, size: 16),
-                      const SizedBox(width: 8),
-                      Expanded(
-                        child: Text(
-                          'Silakan upload dokumen KK untuk verifikasi',
-                          style: TextStyle(
-                            color: Colors.blue.shade800,
-                            fontSize: 12,
+                      // STATUS BADGE
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 10,
+                        ),
+                        decoration: BoxDecoration(
+                          color: _getStatusColor(status).withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(
+                            color: _getStatusColor(status).withOpacity(0.3),
+                            width: 1.5,
                           ),
                         ),
+                        child: Row(
+                          mainAxisAlignment: MainAxisAlignment.center,
+                          children: [
+                            _getStatusIcon(status, size: 20),
+                            const SizedBox(width: 10),
+                            Text(
+                              _getKKStatusText(status),
+                              style: TextStyle(
+                                fontSize: 16,
+                                fontWeight: FontWeight.w600,
+                                color: _getStatusColor(status),
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
+                      const SizedBox(height: 24),
+
+                      // TIMELINE INFO
+                      _buildTimelineInfo(
+                        icon: Icons.calendar_today_rounded,
+                        label: 'Waktu Upload',
+                        value: uploadedAt != null
+                            ? _formatDateTime(uploadedAt)
+                            : '-',
+                      ),
+                      if (verifiedAt != null && verifiedAt.isNotEmpty)
+                        _buildTimelineInfo(
+                          icon: Icons.verified_rounded,
+                          label: 'Diverifikasi pada',
+                          value: _formatDateTime(verifiedAt),
+                          color: Colors.green,
+                        ),
+
+                      if (verifiedBy != null && verifiedBy.isNotEmpty)
+                        _buildTimelineInfo(
+                          icon: Icons.person_rounded,
+                          label: 'Diverifikasi oleh',
+                          value: verifiedBy,
+                        ),
+
+                      // REJECTION REASON (jika ditolak)
+                      if (rejectionReason != null && rejectionReason.isNotEmpty)
+                        Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            const SizedBox(height: 16),
+                            Container(
+                              padding: const EdgeInsets.all(16),
+                              decoration: BoxDecoration(
+                                color: Colors.red.shade50,
+                                borderRadius: BorderRadius.circular(12),
+                                border: Border.all(
+                                  color: Colors.red.shade100,
+                                  width: 1.5,
+                                ),
+                              ),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Row(
+                                    children: [
+                                      Icon(
+                                        Icons.warning_amber_rounded,
+                                        color: Colors.red.shade600,
+                                        size: 20,
+                                      ),
+                                      const SizedBox(width: 8),
+                                      Text(
+                                        'Alasan Penolakan',
+                                        style: TextStyle(
+                                          fontSize: 15,
+                                          fontWeight: FontWeight.w600,
+                                          color: Colors.red.shade700,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  const SizedBox(height: 10),
+                                  Text(
+                                    rejectionReason,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.red.shade800,
+                                      height: 1.5,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+
+                      // ACTION GUIDES BERDASARKAN STATUS
+                      const SizedBox(height: 20),
+                      _buildActionGuide(status),
                     ],
                   ),
                 ),
-              ],
+              ),
+
+              // FOOTER WITH ACTIONS
+              Container(
+                padding: const EdgeInsets.all(20),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade50,
+                  border: Border(
+                    top: BorderSide(color: Colors.grey.shade200, width: 1),
+                  ),
+                  borderRadius: const BorderRadius.only(
+                    bottomLeft: Radius.circular(24),
+                    bottomRight: Radius.circular(24),
+                  ),
+                ),
+                child: Row(
+                  children: [
+                    // Tombol Tutup
+                    Expanded(
+                      child: OutlinedButton.icon(
+                        onPressed: () => Navigator.pop(context),
+                        icon: const Icon(Icons.close, size: 18),
+                        label: const Text('Tutup'),
+                        style: OutlinedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          side: BorderSide(color: Colors.grey.shade400),
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                        ),
+                      ),
+                    ),
+
+                    const SizedBox(width: 12),
+
+                    // Tombol Aksi Utama
+                    if (status == 'rejected' || status == 'not_uploaded')
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () {
+                            Navigator.pop(context);
+                            _showUploadKKDialog(context);
+                          },
+                          icon: const Icon(Icons.upload_rounded, size: 18),
+                          label: const Text('Upload Ulang'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.blue.shade600,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            elevation: 2,
+                          ),
+                        ),
+                      ),
+
+                    if (status == 'pending_review')
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () => _viewKKDocument(context),
+                          icon: const Icon(Icons.visibility_rounded, size: 18),
+                          label: const Text('Lihat Dokumen'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.orange.shade600,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
+
+                    if (status == 'verified')
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: () => _viewKKDocument(context),
+                          icon: const Icon(Icons.download_rounded, size: 18),
+                          label: const Text('Download'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.green.shade600,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                        ),
+                      ),
+                  ],
+                ),
+              ),
             ],
           ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: Text('Tutup', style: TextStyle(color: Colors.grey.shade600)),
+      ),
+    );
+  }
+
+  // ===== HELPER FUNCTIONS =====
+
+  Widget _buildTimelineInfo({
+    required IconData icon,
+    required String label,
+    required String value,
+    Color? color,
+  }) {
+    return Container(
+      margin: const EdgeInsets.only(bottom: 12),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(10),
+        border: Border.all(color: Colors.grey.shade200),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.05),
+            blurRadius: 6,
+            offset: const Offset(0, 2),
           ),
-          if (status == 'rejected' || status == 'not_uploaded')
-            ElevatedButton(
-              onPressed: () {
-                Navigator.pop(context);
-                _showUploadKKDialog(context);
-              },
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue.shade600,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(12),
+        ],
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(icon, color: color ?? Colors.blue.shade600, size: 18),
+          const SizedBox(width: 12),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: Colors.grey.shade600,
+                    fontWeight: FontWeight.w500,
+                  ),
                 ),
-              ),
-              child: const Text('Upload Ulang'),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    fontWeight: FontWeight.w600,
+                    color: Colors.black87,
+                  ),
+                ),
+              ],
             ),
+          ),
         ],
       ),
     );
   }
 
-  Widget _buildKKDetailItem(String label, String value, {Color? color}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildActionGuide(String status) {
+    String title;
+    String description;
+    Color color;
+    IconData icon;
+
+    switch (status) {
+      case 'not_uploaded':
+        title = '📤 Upload Dokumen KK';
+        description =
+            'Silakan upload dokumen KK Anda untuk memulai proses verifikasi. Pastikan foto jelas dan terbaca.';
+        color = Colors.blue.shade600;
+        icon = Icons.upload_rounded;
+        break;
+      case 'pending_review':
+        title = '⏳ Sedang Diproses';
+        description =
+            'Dokumen Anda sedang dalam proses verifikasi oleh admin. Biasanya membutuhkan waktu 1-3 hari kerja.';
+        color = Colors.orange.shade600;
+        icon = Icons.hourglass_empty_rounded;
+        break;
+      case 'rejected':
+        title = '⚠️ Perbaikan Diperlukan';
+        description =
+            'Dokumen Anda ditolak. Silakan upload ulang dengan memperhatikan alasan penolakan di atas.';
+        color = Colors.red.shade600;
+        icon = Icons.warning_amber_rounded;
+        break;
+      case 'verified':
+        title = '✅ Verifikasi Berhasil';
+        description =
+            'Dokumen KK Anda telah terverifikasi. Anda dapat mengakses semua fitur aplikasi.';
+        color = Colors.green.shade600;
+        icon = Icons.verified_rounded;
+        break;
+      default:
+        title = 'ℹ️ Informasi Status';
+        description = 'Status verifikasi dokumen KK Anda.';
+        color = Colors.grey.shade600;
+        icon = Icons.info_rounded;
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [color.withOpacity(0.1), color.withOpacity(0.05)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: color.withOpacity(0.2)),
+      ),
+      child: Row(
         children: [
-          Text(
-            label,
-            style: TextStyle(fontSize: 12, color: Colors.grey.shade600),
+          Container(
+            padding: const EdgeInsets.all(8),
+            decoration: BoxDecoration(
+              color: color.withOpacity(0.2),
+              shape: BoxShape.circle,
+            ),
+            child: Icon(icon, color: color, size: 20),
           ),
-          const SizedBox(height: 4),
-          Text(
-            value,
-            style: TextStyle(
-              fontSize: 14,
-              fontWeight: FontWeight.w500,
-              color: color ?? Colors.grey.shade800,
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  title,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: color,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  description,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: Colors.grey.shade700,
+                    height: 1.4,
+                  ),
+                ),
+              ],
             ),
           ),
         ],
       ),
     );
+  }
+
+  Icon _getStatusIcon(String status, {double size = 24}) {
+    switch (status) {
+      case 'verified':
+        return Icon(
+          Icons.verified_rounded,
+          color: Colors.green.shade600,
+          size: size,
+        );
+      case 'rejected':
+        return Icon(
+          Icons.error_outline_rounded,
+          color: Colors.red.shade600,
+          size: size,
+        );
+      case 'pending_review':
+        return Icon(
+          Icons.pending_actions_rounded,
+          color: Colors.orange.shade600,
+          size: size,
+        );
+      default:
+        return Icon(
+          Icons.cloud_upload_rounded,
+          color: Colors.blue.shade600,
+          size: size,
+        );
+    }
   }
 
   String _getKKStatusText(String status) {
     switch (status) {
       case 'verified':
-        return 'Terverifikasi ✅';
+        return '✅ Terverifikasi';
       case 'rejected':
-        return 'Ditolak ❌';
+        return '❌ Ditolak';
       case 'pending_review':
-        return 'Menunggu Verifikasi ⏳';
+        return '⏳ Menunggu Verifikasi';
       case 'not_uploaded':
-        return 'Belum Upload Dokumen 📄';
+        return '📄 Belum Upload';
       default:
         return status;
     }
@@ -3032,15 +3369,39 @@ Mohon ditindaklanjuti.
   Color _getStatusColor(String status) {
     switch (status) {
       case 'verified':
-        return Colors.green.shade600;
+        return Colors.green;
       case 'rejected':
-        return Colors.red.shade600;
+        return Colors.red;
       case 'pending_review':
-        return Colors.orange.shade600;
+        return Colors.orange;
       case 'not_uploaded':
-        return Colors.grey.shade600;
+        return Colors.blue;
       default:
-        return Colors.grey.shade800;
+        return Colors.grey;
+    }
+  }
+
+  String _formatDateTime(String? dateTime) {
+    if (dateTime == null) return '-';
+    try {
+      final date = DateTime.parse(dateTime);
+      final now = DateTime.now();
+      final difference = now.difference(date);
+
+      // Format relatif jika < 7 hari
+      if (difference.inDays < 1) {
+        if (difference.inHours < 1) {
+          return '${difference.inMinutes} menit yang lalu';
+        }
+        return '${difference.inHours} jam yang lalu';
+      } else if (difference.inDays < 7) {
+        return '${difference.inDays} hari yang lalu';
+      }
+
+      // Format lengkap untuk tanggal lama
+      return '${date.day}/${date.month}/${date.year} ${date.hour.toString().padLeft(2, '0')}:${date.minute.toString().padLeft(2, '0')}';
+    } catch (e) {
+      return dateTime;
     }
   }
 
@@ -4687,7 +5048,6 @@ Mohon ditindaklanjuti.
     );
   }
 
-
   void _showPrivacyPolicy(BuildContext context) {
     _showInfoDialog(context, 'Kebijakan Privasi Warga App', '''
 **TERAKHIR DIPERBARUI: 12 Desember 2024**
@@ -4921,7 +5281,6 @@ Untuk pertanyaan terkait Syarat dan Ketentuan ini, silakan hubungi:
 Versi: 2.0
 ''');
   }
-
 
   void _showRatingDialog(BuildContext context) {
     int selectedRating = 0;
@@ -6051,16 +6410,6 @@ Aplikasi: Warga App
   String _formatDate(DateTime? date) {
     if (date == null) return '-';
     return '${date.day}/${date.month}/${date.year}';
-  }
-
-  String _formatDateTime(String? dateTime) {
-    if (dateTime == null) return '-';
-    try {
-      final date = DateTime.parse(dateTime);
-      return '${date.day}/${date.month}/${date.year} ${date.hour}:${date.minute.toString().padLeft(2, '0')}';
-    } catch (e) {
-      return dateTime;
-    }
   }
 
   void _showSuccessSnackbar(String message) {

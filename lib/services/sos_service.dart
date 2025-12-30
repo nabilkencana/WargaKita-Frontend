@@ -33,10 +33,20 @@ class SosService {
         body: json.encode(request.toJson()),
       );
 
+      print('📦 CREATE SOS RESPONSE: ${response.body}');
+
       _handleError(response);
 
       final responseData = json.decode(response.body);
-      return Emergency.fromJson(responseData);
+
+      // 🔥 HANDLE JIKA RESPONSE PAKAI data
+      final emergencyJson =
+          responseData is Map && responseData.containsKey('data')
+          ? responseData['data']
+          : responseData;
+
+      return Emergency.fromJson(emergencyJson);
+
     } catch (e) {
       throw Exception('Gagal mengirim SOS: $e');
     }

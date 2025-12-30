@@ -9,6 +9,10 @@ list(APPEND FLUTTER_PLUGIN_LIST
   firebase_auth
   firebase_core
   geolocator_windows
+  local_auth_windows
+  permission_handler_windows
+  printing
+  share_plus
   url_launcher_windows
 )
 

@@ -76,7 +76,10 @@ class User {
     this.kkVerifiedBy,
     this.usia,
     this.kkVerificationStatus,
-    this.hasKKDocument, required String namaLengkap, required String nomorTelepon, String? fotoProfil,
+    this.hasKKDocument,
+    required String namaLengkap,
+    required String nomorTelepon,
+    String? fotoProfil,
   });
 
   // Getter untuk kompatibilitas dengan screen
@@ -159,7 +162,12 @@ class User {
       // Extract KK fields
       String? kkFile = userData['kkFile']?.toString();
       String? kkRejectionReason = userData['kkRejectionReason']?.toString();
-      String? kkVerifiedBy = userData['kkVerifiedBy']?.toString();
+      String? kkVerifiedBy =
+          userData['verifiedBy']?.toString() ??
+          userData['kkVerifiedBy']?.toString(); // fallback kalau lama
+
+      print('🧪 verifiedBy from API: ${userData['verifiedBy']}');
+      print('🧪 kkVerifiedBy from API: ${userData['kkVerifiedBy']}');
 
       DateTime? kkVerifiedAt;
       if (userData['kkVerifiedAt'] != null) {
@@ -198,7 +206,9 @@ class User {
         kkFile: kkFile,
         kkRejectionReason: kkRejectionReason,
         kkVerifiedAt: kkVerifiedAt,
-        kkVerifiedBy: kkVerifiedBy, namaLengkap: '', nomorTelepon: '',
+        kkVerifiedBy: kkVerifiedBy,
+        namaLengkap: '',
+        nomorTelepon: '',
       );
     } catch (e) {
       print('❌ Error parsing User: $e');
@@ -317,7 +327,9 @@ class User {
       kkVerifiedBy: kkVerifiedBy ?? this.kkVerifiedBy,
       usia: usia ?? this.usia,
       kkVerificationStatus: kkVerificationStatus ?? this.kkVerificationStatus,
-      hasKKDocument: hasKKDocument ?? this.hasKKDocument, namaLengkap: '', nomorTelepon: '',
+      hasKKDocument: hasKKDocument ?? this.hasKKDocument,
+      namaLengkap: '',
+      nomorTelepon: '',
     );
   }
 

@@ -1,5 +1,8 @@
 // sos_screen.dart
 import 'package:flutter/material.dart';
+import 'package:geolocator/geolocator.dart';
+import 'package:warga_app/models/security_location.dart';
+import 'package:warga_app/widget/emergency_map.dart';
 import '../models/user_model.dart';
 import '../models/sos_model.dart';
 import '../services/sos_service.dart';
@@ -87,12 +90,28 @@ class _SosScreenState extends State<SosScreen> {
     });
 
     try {
-      // Pastikan userId adalah int
-      int? userId;
+      late final int userId;
+
+      if (widget.user.id == null) {
+        throw Exception('User ID tidak ditemukan (null)');
+      }
+
       if (widget.user.id is int) {
         userId = widget.user.id as int;
-      } else      userId = int.tryParse(widget.user.id);
-    
+      } else if (widget.user.id is String) {
+        final parsed = int.tryParse(widget.user.id as String);
+        if (parsed == null) {
+          throw Exception('User ID tidak valid: ${widget.user.id}');
+        }
+        userId = parsed;
+      } else {
+        throw Exception('Tipe User ID tidak dikenal');
+      }
+
+      print('👤 USER ID RAW: ${widget.user.id}');
+      print('👤 USER ID TYPE: ${widget.user.id.runtimeType}');
+      print('👤 USER ID FINAL: $userId');
+
     
       final request = CreateSOSRequest(
         type: type,
@@ -115,6 +134,7 @@ class _SosScreenState extends State<SosScreen> {
       // Tampilkan detail emergency yang baru dibuat
       _showEmergencyDetails(emergency);
     } catch (e) {
+      print('❌ Error: $e');
       _showErrorSnackbar('Gagal mengirim SOS: $e');
     } finally {
       setState(() {
@@ -123,7 +143,17 @@ class _SosScreenState extends State<SosScreen> {
     }
   }
 
-  void _showEmergencyDetails(Emergency emergency) {
+  void _showEmergencyDetails(Emergency emergency) async {
+    SecurityLocation? securityLocation;
+
+     try {
+      final position = await Geolocator.getCurrentPosition();
+      securityLocation = SecurityLocation(
+        position.latitude,
+        position.longitude,
+      );
+    } catch (_) {}
+    
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -149,8 +179,12 @@ class _SosScreenState extends State<SosScreen> {
               _buildDetailItem('Status', emergency.status),
               if (emergency.details != null)
                 _buildDetailItem('Detail', emergency.details!),
-              if (emergency.location != null)
-                _buildDetailItem('Lokasi', emergency.location!),
+              const SizedBox(height: 12),
+              // 🗺️ MAP
+              EmergencyMap(
+                emergency: emergency,
+                securityLocation: securityLocation,
+              ),
               _buildDetailItem(
                 'Dibuat',
                 DateFormat('dd MMM yyyy HH:mm').format(emergency.createdAt),
@@ -600,9 +634,16 @@ class _SosScreenState extends State<SosScreen> {
     return Scaffold(
       backgroundColor: Colors.white,
       floatingActionButton: FloatingActionButton(
-        onPressed: () => _showEmergencyDialog(context, 'Emergency Umum'),
+        onPressed: _isLoading
+            ? null
+            : () => _showEmergencyDialog(context, 'Emergency Umum'),
         backgroundColor: Colors.red,
-        child: const Icon(Icons.emergency, color: Colors.white),
+        child: _isLoading
+            ? const CircularProgressIndicator(
+                color: Colors.white,
+                strokeWidth: 2.5,
+              )
+            : const Icon(Icons.emergency, color: Colors.white),
       ),
       body: SafeArea(
         child: Column(
