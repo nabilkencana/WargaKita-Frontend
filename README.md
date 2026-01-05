@@ -82,9 +82,9 @@ flutter run
 
 
 Untuk release:
-
+```bash
 flutter build apk --release
-
+```
 ### 📦 Build APK (Untuk Submit Lomba)
 
 File hasil build:
