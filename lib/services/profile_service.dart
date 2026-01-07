@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:http_parser/http_parser.dart';
+import 'package:warga_app/models/login_history_model.dart';
 import '../models/user_model.dart';
 import 'auth_service.dart';
 
@@ -674,4 +675,41 @@ class ProfileService {
       throw Exception('Gagal mengambil aktivitas: ${e.toString()}');
     }
   }
+
+  // =======================
+  // LOGIN HISTORY
+  // =======================
+  static Future<List<LoginHistory>> getLoginHistory() async {
+    try {
+      final token = await AuthService.getToken();
+      if (token == null || token.isEmpty) {
+        throw Exception('Token tidak tersedia');
+      }
+
+      final response = await http.get(
+        Uri.parse('$_baseUrl/auth/login-history'),
+        headers: {
+          'Authorization': 'Bearer $token',
+          'Accept': 'application/json',
+        },
+      );
+
+      print('🕒 Login History Status: ${response.statusCode}');
+      print('🕒 Login History Body: ${response.body}');
+
+      if (response.statusCode.toString().startsWith('2')) {
+        final List data = json.decode(response.body);
+        return data.map((e) => LoginHistory.fromJson(e)).toList();
+      } else if (response.statusCode == 401) {
+        await AuthService.logout();
+        throw Exception('Sesi berakhir');
+      } else {
+        throw Exception('Gagal mengambil riwayat login');
+      }
+    } catch (e) {
+      print('❌ Error get login history: $e');
+      rethrow;
+    }
+  }
+
 }

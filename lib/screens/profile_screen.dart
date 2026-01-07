@@ -4,11 +4,11 @@ import 'package:dio/dio.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:image_picker/image_picker.dart';
-import 'package:local_auth/local_auth.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:printing/printing.dart';
 import 'package:share_plus/share_plus.dart';
 import 'package:shared_preferences/shared_preferences.dart';
+import 'package:warga_app/models/login_history_model.dart';
 import 'package:warga_app/screens/login_screen.dart';
 import 'package:url_launcher/url_launcher.dart';
 import '../models/user_model.dart';
@@ -2679,35 +2679,35 @@ Mohon ditindaklanjuti.
                 ),
               ),
               Expanded(
-                child: Padding(
+                child: ListView(
                   padding: const EdgeInsets.all(20),
-                  child: Column(
-                    children: [
-                      _buildSecurityOption(
-                        Icons.fingerprint,
-                        'Autentikasi Biometrik',
-                        'Gunakan sidik jari atau wajah untuk login',
-                        _currentUser.biometricData != null,
-                        (value) => _toggleBiometricAuth(value),
-                      ),
-                      const SizedBox(height: 12),
-                      _buildSecurityOption(
-                        Icons.phone_android,
-                        'Verifikasi 2 Langkah',
-                        'Tambah keamanan ekstra dengan OTP',
-                        _currentUser.twoFactorEnabled ?? false,
-                        (value) => _toggleTwoFactorAuth(value),
-                      ),
-                      const SizedBox(height: 12),
-                      _buildSecurityOption(
-                        Icons.language,
-                        'Bahasa Aplikasi',
-                        'Pilih bahasa untuk aplikasi',
-                        false,
-                        (value) => _showLanguageSettings(context),
-                      ),
-                    ],
-                  ),
+                  children: [
+                    _buildActionOption(
+                      Icons.history,
+                      'Riwayat Login',
+                      'Lihat aktivitas login akun',
+                      () => _showLoginHistory(context),
+                    ),
+                    const SizedBox(height: 12),
+
+                    _buildActionOption(
+                      Icons.logout,
+                      'Logout Semua Perangkat',
+                      'Keluar dari semua perangkat aktif',
+                      () => _logoutAllDevices(),
+                    ),
+                    const SizedBox(height: 12),
+
+                    _buildActionOption(
+                      Icons.language,
+                      'Bahasa Aplikasi',
+                      'Pilih bahasa untuk aplikasi',
+                      () => _showLanguageSettings(context),
+                    ),
+
+                    // extra padding biar aman
+                    const SizedBox(height: 20),
+                  ],
                 ),
               ),
             ],
@@ -2717,12 +2717,11 @@ Mohon ditindaklanjuti.
     );
   }
 
-  Widget _buildSecurityOption(
+  Widget _buildActionOption(
     IconData icon,
     String title,
     String subtitle,
-    bool value,
-    Function(bool) onChanged,
+    VoidCallback onTap,
   ) {
     return Card(
       elevation: 2,
@@ -2735,96 +2734,404 @@ Mohon ditindaklanjuti.
             color: Colors.blue.shade50,
             shape: BoxShape.circle,
           ),
-          child: Icon(icon, color: Colors.blue.shade600, size: 22),
+          child: Icon(icon, color: Colors.blue.shade600),
         ),
         title: Text(title, style: const TextStyle(fontWeight: FontWeight.w500)),
-        subtitle: Text(subtitle, style: TextStyle(color: Colors.grey.shade600)),
-        trailing: title == 'Bahasa Aplikasi'
-            ? Icon(
-                Icons.arrow_forward_ios,
-                size: 16,
-                color: Colors.grey.shade400,
-              )
-            : Switch(
-                value: value,
-                onChanged: onChanged,
-                activeColor: Colors.blue.shade600,
-              ),
-        onTap: title == 'Bahasa Aplikasi'
-            ? () => _showLanguageSettings(context)
-            : null,
-        contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        subtitle: Text(subtitle),
+        trailing: const Icon(Icons.arrow_forward_ios, size: 16),
+        onTap: onTap,
       ),
     );
   }
 
-  Future<void> _toggleBiometricAuth(bool value) async {
-    final auth = LocalAuthentication();
-    final prefs = await SharedPreferences.getInstance();
+  void _showLoginHistory(BuildContext context) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (_) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.5, // 👈 SETENGAH LAYAR
+          minChildSize: 0.35,
+          maxChildSize: 0.8,
+          builder: (context, scrollController) {
+            return Container(
+              decoration: const BoxDecoration(
+                color: Colors.white,
+                borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+              ),
+              child: Column(
+                children: [
+                  // 🔘 DRAG HANDLE
+                  Container(
+                    margin: const EdgeInsets.only(top: 12, bottom: 8),
+                    width: 40,
+                    height: 5,
+                    decoration: BoxDecoration(
+                      color: Colors.grey.shade400,
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                  ),
 
-    try {
-      final canCheck = await auth.canCheckBiometrics;
-      if (!canCheck) {
-        _showErrorSnackbar('Perangkat tidak mendukung biometrik');
-        return;
-      }
+                  // 🏷️ TITLE
+                  const Padding(
+                    padding: EdgeInsets.symmetric(vertical: 8),
+                    child: Text(
+                      'Riwayat Login',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ),
 
-      final authenticated = await auth.authenticate(
-        localizedReason: 'Verifikasi biometrik untuk keamanan',
-      );
+                  const Divider(),
 
-      if (authenticated) {
-        await prefs.setBool('biometric', value);
-        _showSuccessSnackbar(
-          value ? 'Biometrik diaktifkan' : 'Biometrik dimatikan',
+                  // 📜 CONTENT
+                  Expanded(
+                    child: FutureBuilder<List<LoginHistory>>(
+                      future: ProfileService.getLoginHistory(),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState ==
+                            ConnectionState.waiting) {
+                          return const Center(
+                            child: CircularProgressIndicator(),
+                          );
+                        }
+
+                        if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                          return const Center(
+                            child: Text('Belum ada riwayat login'),
+                          );
+                        }
+
+                        return ListView.builder(
+                          controller: scrollController,
+                          itemCount: snapshot.data!.length,
+                          itemBuilder: (context, index) {
+                            final item = snapshot.data![index];
+
+                            return ListTile(
+                              leading: Icon(
+                                item.deviceType == 'Android'
+                                    ? Icons.phone_android
+                                    : Icons.language,
+                              ),
+                              title: Text(item.deviceName),
+                              subtitle: Text(
+                                '${item.city ?? 'Lokasi tidak diketahui'}\n'
+                                '${item.createdAt}',
+                              ),
+                              trailing: index == 0
+                                  ? const Chip(
+                                      label: Text(
+                                        'Login Terakhir',
+                                        style: TextStyle(fontSize: 12),
+                                      ),
+                                    )
+                                  : null,
+                            );
+                          },
+                        );
+                      },
+                    ),
+                  ),
+                ],
+              ),
+            );
+          },
         );
-      }
-    } catch (e) {
-      _showErrorSnackbar('Autentikasi biometrik gagal');
-    }
-  }
-
-
-
-  Future<void> _toggleTwoFactorAuth(bool value) async {
-    final prefs = await SharedPreferences.getInstance();
-
-    if (value) {
-      final confirmed = await _showOtpConfirmation();
-      if (!confirmed) return;
-    }
-
-    await prefs.setBool('2fa', value);
-
-    _showSuccessSnackbar(
-      value
-          ? 'Verifikasi 2 Langkah diaktifkan'
-          : 'Verifikasi 2 Langkah dimatikan',
+      },
     );
   }
 
-  Future<bool> _showOtpConfirmation() async {
-    return await showDialog<bool>(
-          context: context,
-          builder: (_) => AlertDialog(
-            title: const Text('Aktifkan Verifikasi 2 Langkah'),
-            content: const Text(
-              'Kode OTP akan dikirim setiap login untuk keamanan tambahan.',
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.pop(context, false),
-                child: const Text('Batal'),
-              ),
-              ElevatedButton(
-                onPressed: () => Navigator.pop(context, true),
-                child: const Text('Aktifkan'),
-              ),
-            ],
+
+
+  Future<bool> _confirmLogoutAllDevices() async {
+    final result = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) {
+        return Dialog(
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(24),
           ),
-        ) ??
-        false;
+          elevation: 4,
+          shadowColor: Colors.black.withOpacity(0.2),
+          child: Container(
+            constraints: const BoxConstraints(maxWidth: 400),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                // Header dengan ikon dan judul
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    vertical: 24,
+                    horizontal: 24,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.red.shade50,
+                    borderRadius: const BorderRadius.only(
+                      topLeft: Radius.circular(24),
+                      topRight: Radius.circular(24),
+                    ),
+                  ),
+                  child: Column(
+                    children: [
+                      // Ikon peringatan
+                      Container(
+                        width: 64,
+                        height: 64,
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade100,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: Colors.red.shade200,
+                            width: 2,
+                          ),
+                        ),
+                        child: Icon(
+                          Icons.logout_rounded,
+                          color: Colors.red.shade600,
+                          size: 32,
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+
+                      // Judul
+                      const Text(
+                        'Logout dari Semua Perangkat',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.black87,
+                        ),
+                        textAlign: TextAlign.center,
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Konten pesan
+                Padding(
+                  padding: const EdgeInsets.all(24),
+                  child: Column(
+                    children: [
+
+                      const SizedBox(height: 20),
+
+                      // Pesan utama
+                      const Text(
+                        'Anda akan keluar dari semua perangkat:',
+                        style: TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                          color: Colors.black87,
+                        ),
+                      ),
+
+                      const SizedBox(height: 12),
+
+                      // Daftar perangkat yang akan terkena
+                      Container(
+                        width: double.infinity,
+                        padding: const EdgeInsets.all(16),
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade50,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.grey.shade200),
+                        ),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            _buildAffectedDevice(
+                              'Smartphone ini',
+                              Icons.check_circle,
+                              Colors.green,
+                            ),
+                            _buildAffectedDevice(
+                              'Tablet terdaftar',
+                              Icons.check_circle,
+                              Colors.green,
+                            ),
+                            _buildAffectedDevice(
+                              'Perangkat lain',
+                              Icons.check_circle,
+                              Colors.green,
+                            ),
+                          ],
+                        ),
+                      ),
+
+                      const SizedBox(height: 16),
+
+                      // Peringatan penting
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.orange.shade50,
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(color: Colors.orange.shade200),
+                        ),
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Icon(
+                              Icons.warning_amber_rounded,
+                              color: Colors.orange.shade600,
+                              size: 20,
+                            ),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    'Peringatan',
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.orange.shade800,
+                                    ),
+                                  ),
+                                  const SizedBox(height: 4),
+                                  Text(
+                                    'Anda harus login kembali di semua perangkat '
+                                    'yang ingin digunakan.',
+                                    style: TextStyle(
+                                      fontSize: 13,
+                                      color: Colors.orange.shade700,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+
+                // Tombol aksi
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 24,
+                    vertical: 20,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.grey.shade50,
+                    border: Border(
+                      top: BorderSide(color: Colors.grey.shade200, width: 1),
+                    ),
+                    borderRadius: const BorderRadius.only(
+                      bottomLeft: Radius.circular(24),
+                      bottomRight: Radius.circular(24),
+                    ),
+                  ),
+                  child: Row(
+                    children: [
+                      // Tombol Batal
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: () => Navigator.pop(context, false),
+                          style: OutlinedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            side: BorderSide(color: Colors.grey.shade300),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                          ),
+                          child: Text(
+                            'Batal',
+                            style: TextStyle(
+                              color: Colors.grey.shade700,
+                              fontWeight: FontWeight.w500,
+                              fontSize: 15,
+                            ),
+                          ),
+                        ),
+                      ),
+
+                      const SizedBox(width: 16),
+
+                      // Tombol Logout
+                      Expanded(
+                        child: ElevatedButton(
+                          onPressed: () => Navigator.pop(context, true),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: Colors.red.shade600,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(12),
+                            ),
+                            elevation: 2,
+                            shadowColor: Colors.red.shade200,
+                          ),
+                          child: const Row(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.logout_rounded, size: 15),
+                              SizedBox(width: 8),
+                              Text(
+                                'Logout Semua',
+                                style: TextStyle(
+                                  fontWeight: FontWeight.w500,
+                                  fontSize: 13,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    return result ?? false;
   }
+
+  // Helper untuk daftar perangkat terkena
+  Widget _buildAffectedDevice(String device, IconData icon, Color color) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6),
+      child: Row(
+        children: [
+          Icon(icon, color: color, size: 16),
+          const SizedBox(width: 10),
+          Text(
+            device,
+            style: TextStyle(fontSize: 14, color: Colors.grey.shade700),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _logoutAllDevices() async {
+    final confirmed = await _confirmLogoutAllDevices();
+
+    if (!confirmed) return;
+
+    try {
+      await AuthService.logoutAllDevices(); // 🔥 PANGGIL API
+
+      _showSuccessSnackbar('Berhasil logout dari semua perangkat');
+
+      Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+    } catch (e) {
+      _showErrorSnackbar('Gagal logout dari semua perangkat');
+    }
+  }
+
+
 
   void _showLanguageSettings(BuildContext context) {
     showModalBottomSheet(

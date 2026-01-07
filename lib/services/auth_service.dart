@@ -322,4 +322,23 @@ class AuthService {
 
     return headers;
   }
+
+  static Future<void> logoutAllDevices() async {
+    final token = await getToken();
+
+    final response = await http.post(
+      Uri.parse('$baseUrl/auth/logout-all'),
+      headers: {
+        'Authorization': 'Bearer $token',
+        'Content-Type': 'application/json',
+      },
+    );
+
+    if (response.statusCode.toString().startsWith('2')) {
+      await logout(); // hapus token lokal
+    } else {
+      throw Exception('Gagal logout semua perangkat');
+    }
+  }
+
 }
