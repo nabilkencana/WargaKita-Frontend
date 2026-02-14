@@ -9,4 +9,7 @@ class Config {
 
   // App version
   static const String appVersion = '1.0.0';
+
+  // TODO: Confirm the correct alarm endpoint URL
+  static const String alarmEndpoint = '/api/alarm';
 }
