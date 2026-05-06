@@ -231,6 +231,85 @@ class SosService {
     return updateEmergencyStatus(id, 'RESOLVED');
   }
 
+  // Accept emergency (Satpam only)
+  Future<EmergencyResponse> acceptEmergency(int emergencyId, int satpamId) async {
+    try {
+      final response = await http.post(
+        Uri.parse('$_apiUrl/$emergencyId/accept'),
+        headers: _headers,
+        body: json.encode({'satpamId': satpamId}),
+      );
+
+      _handleError(response);
+
+      final responseData = json.decode(response.body);
+      return EmergencyResponse.fromJson(responseData);
+    } catch (e) {
+      throw Exception('Gagal menerima emergency: $e');
+    }
+  }
+
+  // Update satpam status (ARRIVED, HANDLING, RESOLVED)
+  Future<EmergencyResponse> updateSatpamStatus(
+    int responseId,
+    String status, {
+    String? notes,
+  }) async {
+    try {
+      final Map<String, dynamic> body = {'status': status};
+      if (notes != null) {
+        body['notes'] = notes;
+      }
+
+      final response = await http.patch(
+        Uri.parse('$_apiUrl/responses/$responseId/status'),
+        headers: _headers,
+        body: json.encode(body),
+      );
+
+      _handleError(response);
+
+      final responseData = json.decode(response.body);
+      return EmergencyResponse.fromJson(responseData);
+    } catch (e) {
+      throw Exception('Gagal mengupdate status satpam: $e');
+    }
+  }
+
+  // Get emergencies assigned to a satpam
+  Future<List<Emergency>> getSatpamAssignedEmergencies(int satpamId) async {
+    try {
+      final response = await http.get(
+        Uri.parse('$_apiUrl/satpam/$satpamId/assigned'),
+        headers: _headers,
+      );
+
+      _handleError(response);
+
+      final List<dynamic> responseData = json.decode(response.body);
+      return responseData.map((json) => Emergency.fromJson(json)).toList();
+    } catch (e) {
+      throw Exception('Gagal mengambil data emergency satpam: $e');
+    }
+  }
+
+  // Get emergencies needing satpam
+  Future<List<Emergency>> getEmergenciesNeedSatpam() async {
+    try {
+      final response = await http.get(
+        Uri.parse('$_apiUrl/need-satpam'),
+        headers: _headers,
+      );
+
+      _handleError(response);
+
+      final List<dynamic> responseData = json.decode(response.body);
+      return responseData.map((json) => Emergency.fromJson(json)).toList();
+    } catch (e) {
+      throw Exception('Gagal mengambil data emergency butuh satpam: $e');
+    }
+  }
+
   // Get emergencies by type
   Future<List<Emergency>> getEmergenciesByType(String type) async {
     try {

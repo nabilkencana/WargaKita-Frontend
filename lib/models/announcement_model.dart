@@ -9,6 +9,9 @@ class Announcement {
   final DateTime date;
   final String day;
   final DateTime createdAt;
+  final String? imageUrl;
+  final String? imagePublicId;
+  final bool isHighlight;
   final Admin admin;
 
   Announcement({
@@ -19,6 +22,9 @@ class Announcement {
     required this.date,
     required this.day,
     required this.createdAt,
+    this.imageUrl,
+    this.imagePublicId,
+    this.isHighlight = false,
     required this.admin,
   });
 
@@ -36,6 +42,9 @@ class Announcement {
         createdAt: json['createdAt'] != null
             ? DateTime.tryParse(json['createdAt'].toString()) ?? DateTime.now()
             : DateTime.now(),
+        imageUrl: json['imageUrl']?.toString(),
+        imagePublicId: json['imagePublicId']?.toString(),
+        isHighlight: json['isHighlight'] ?? false,
         admin: json['admin'] != null && json['admin'] is Map
             ? Admin.fromJson(Map<String, dynamic>.from(json['admin']))
             : Admin(id: 0, namaLengkap: 'Admin', email: ''),
@@ -53,6 +62,7 @@ class Announcement {
         date: DateTime.now(),
         day: 'Hari ini',
         createdAt: DateTime.now(),
+        isHighlight: false,
         admin: Admin(id: 0, namaLengkap: 'Admin', email: 'admin@example.com'),
       );
     }
@@ -67,6 +77,9 @@ class Announcement {
       'date': date.toIso8601String(),
       'day': day,
       'createdAt': createdAt.toIso8601String(),
+      'imageUrl': imageUrl,
+      'imagePublicId': imagePublicId,
+      'isHighlight': isHighlight,
       'admin': admin.toJson(),
     };
   }

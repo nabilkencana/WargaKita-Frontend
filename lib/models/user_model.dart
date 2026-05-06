@@ -380,6 +380,9 @@ class User {
   // Method untuk cek apakah user aktif
   bool get isUserActive => isActive ?? true;
 
+  // Method untuk cek apakah user adalah satpam
+  bool get isSatpam => role?.toUpperCase() == 'SATPAM';
+
   // Method untuk format tanggal lahir
   String? get formattedTanggalLahir {
     if (tanggalLahir == null) return null;

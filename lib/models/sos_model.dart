@@ -13,6 +13,12 @@ class Emergency {
   final DateTime createdAt;
   final DateTime updatedAt;
   final List<Volunteer> volunteers;
+  final bool needSatpam;
+  final bool satpamAssigned;
+  final String severity;
+  final bool satpamAlertSent;
+  final DateTime? satpamAlertSentAt;
+  final List<EmergencyResponse> emergencyResponses;
 
   Emergency({
     required this.id,
@@ -28,6 +34,12 @@ class Emergency {
     required this.createdAt,
     required this.updatedAt,
     required this.volunteers,
+    this.needSatpam = true,
+    this.satpamAssigned = false,
+    this.severity = 'MEDIUM',
+    this.satpamAlertSent = false,
+    this.satpamAlertSentAt,
+    this.emergencyResponses = const [],
   });
 
   factory Emergency.fromJson(Map<String, dynamic> json) {
@@ -53,6 +65,17 @@ class Emergency {
               ?.map((v) => Volunteer.fromJson(v))
               .toList() ??
           [],
+      needSatpam: json['needSatpam'] ?? true,
+      satpamAssigned: json['satpamAssigned'] ?? false,
+      severity: json['severity'] ?? 'MEDIUM',
+      satpamAlertSent: json['satpamAlertSent'] ?? false,
+      satpamAlertSentAt: json['satpamAlertSentAt'] != null
+          ? DateTime.parse(json['satpamAlertSentAt'])
+          : null,
+      emergencyResponses: (json['emergencyResponses'] as List?)
+              ?.map((r) => EmergencyResponse.fromJson(r))
+              .toList() ??
+          [],
     );
   }
 
@@ -66,7 +89,65 @@ class Emergency {
       'needVolunteer': needVolunteer,
       'volunteerCount': volunteerCount,
       'userId': userId,
+      'needSatpam': needSatpam,
+      'severity': severity,
     };
+  }
+}
+
+enum SatpamResponseStatus {
+  PENDING,
+  ACCEPTED,
+  REJECTED,
+  ARRIVED,
+  HANDLING,
+  RESOLVED
+}
+
+class EmergencyResponse {
+  final int id;
+  final int emergencyId;
+  final int? satpamId;
+  final String status;
+  final String? satpamStatus;
+  final String? actionTaken;
+  final String? notes;
+  final DateTime? satpamArrivedAt;
+  final DateTime? satpamCompletedAt;
+  final DateTime createdAt;
+
+  EmergencyResponse({
+    required this.id,
+    required this.emergencyId,
+    this.satpamId,
+    required this.status,
+    this.satpamStatus,
+    this.actionTaken,
+    this.notes,
+    this.satpamArrivedAt,
+    this.satpamCompletedAt,
+    required this.createdAt,
+  });
+
+  factory EmergencyResponse.fromJson(Map<String, dynamic> json) {
+    return EmergencyResponse(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      emergencyId: (json['emergencyId'] as num?)?.toInt() ?? 0,
+      satpamId: (json['satpamId'] as num?)?.toInt(),
+      status: json['status'] ?? 'DISPATCHED',
+      satpamStatus: json['satpamStatus'],
+      actionTaken: json['actionTaken'],
+      notes: json['notes'],
+      satpamArrivedAt: json['satpamArrivedAt'] != null
+          ? DateTime.parse(json['satpamArrivedAt'])
+          : null,
+      satpamCompletedAt: json['satpamCompletedAt'] != null
+          ? DateTime.parse(json['satpamCompletedAt'])
+          : null,
+      createdAt: json['createdAt'] != null
+          ? DateTime.parse(json['createdAt'])
+          : DateTime.now(),
+    );
   }
 }
 
@@ -127,20 +208,23 @@ class EmergencyStats {
   final int active;
   final int resolved;
   final int needVolunteers;
+  final int needSatpam;
 
   EmergencyStats({
     required this.total,
     required this.active,
     required this.resolved,
     required this.needVolunteers,
+    this.needSatpam = 0,
   });
 
   factory EmergencyStats.fromJson(Map<String, dynamic> json) {
     return EmergencyStats(
-      total: json['total'] as int,
-      active: json['active'] as int,
-      resolved: json['resolved'] as int,
-      needVolunteers: json['needVolunteers'] as int,
+      total: json['total'] as int? ?? 0,
+      active: json['active'] as int? ?? 0,
+      resolved: json['resolved'] as int? ?? 0,
+      needVolunteers: json['needVolunteers'] as int? ?? 0,
+      needSatpam: json['needSatpam'] as int? ?? 0,
     );
   }
 }
