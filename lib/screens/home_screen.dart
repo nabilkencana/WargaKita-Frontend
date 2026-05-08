@@ -1158,7 +1158,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                             decoration: BoxDecoration(
                               color: announcement.backgroundColor,
                               borderRadius: BorderRadius.circular(8),
-                              border: Border.all(color: announcement.borderColor),
+                              border: Border.all(
+                                color: announcement.borderColor,
+                              ),
                             ),
                             child: Text(
                               announcement.targetAudience,
@@ -1424,7 +1426,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       });
     });
   }
-
 
   // 🔄 UPDATE: Widget notification item dengan callback onTap
   Widget _buildNotificationItem(
@@ -2185,7 +2186,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               ),
             ),
           ),
-          
+
           if (_currentUser.isSatpam) ...[
             const SizedBox(height: 20),
             _buildSatpamShortcut(),
@@ -2282,10 +2283,26 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   void _showFilterOptions() {
     // Filter options yang tersedia
     final filterOptions = [
-      {'label': 'Semua', 'icon': Icons.all_inclusive_rounded, 'desc': 'Tampilkan semua pengumuman'},
-      {'label': 'Semua Warga', 'icon': Icons.people_rounded, 'desc': 'Pengumuman untuk seluruh warga'},
-      {'label': 'Warga', 'icon': Icons.person_rounded, 'desc': 'Khusus untuk warga umum'},
-      {'label': 'Pengurus', 'icon': Icons.admin_panel_settings_rounded, 'desc': 'Khusus untuk RT/RW/Admin'},
+      {
+        'label': 'Semua',
+        'icon': Icons.all_inclusive_rounded,
+        'desc': 'Tampilkan semua pengumuman',
+      },
+      {
+        'label': 'Semua Warga',
+        'icon': Icons.people_rounded,
+        'desc': 'Pengumuman untuk seluruh warga',
+      },
+      {
+        'label': 'Warga',
+        'icon': Icons.person_rounded,
+        'desc': 'Khusus untuk warga umum',
+      },
+      {
+        'label': 'Pengurus',
+        'icon': Icons.admin_panel_settings_rounded,
+        'desc': 'Khusus untuk RT/RW/Admin',
+      },
     ];
 
     String tempSelected = _selectedFilter;
@@ -2485,7 +2502,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        const Icon(Icons.check_rounded, color: Colors.white, size: 20),
+                        const Icon(
+                          Icons.check_rounded,
+                          color: Colors.white,
+                          size: 20,
+                        ),
                         const SizedBox(width: 8),
                         Text(
                           tempSelected == 'Semua'
@@ -2540,7 +2561,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   // === BANNER YANG DIPERBAIKI ===
   Widget _buildBanner() {
     // Cari pengumuman yang di-highlight
-    final highlightedAnnouncements = _announcements.where((a) => a.isHighlight == true).toList();
+    final highlightedAnnouncements = _announcements
+        .where((a) => a.isHighlight == true)
+        .toList();
     if (highlightedAnnouncements.isEmpty) {
       return const SizedBox.shrink(); // Sembunyikan banner jika tidak ada highlight
     }
@@ -2708,7 +2731,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       ),
                       const Spacer(),
                       GestureDetector(
-                        onTap: () => _showAnnouncementDetails(highlightAnnouncement),
+                        onTap: () =>
+                            _showAnnouncementDetails(highlightAnnouncement),
                         child: Container(
                           padding: const EdgeInsets.symmetric(
                             horizontal: 16,
@@ -2755,8 +2779,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Widget _buildAnnouncementsList() {
     // ✅ FIX: Gunakan _filteredAnnouncements jika ada search/filter aktif,
     // atau _announcements jika tidak ada filter sama sekali
-    final announcementsToShow =
-        (_isSearching || _isFilterActive) ? _filteredAnnouncements : _announcements;
+    final announcementsToShow = (_isSearching || _isFilterActive)
+        ? _filteredAnnouncements
+        : _announcements;
 
     final bool hasActiveCondition = _isSearching || _isFilterActive;
     String sectionTitle = 'Pengumuman Terbaru';
@@ -2769,11 +2794,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
 
     return Padding(
-      padding: const EdgeInsets.only(
-        left: 24,
-        right: 24,
-        bottom: 25,
-      ),
+      padding: const EdgeInsets.only(left: 24, right: 24, bottom: 25),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
@@ -2824,7 +2845,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ),
 
           // Tag filter aktif
-          if (hasActiveCondition) ...[  
+          if (hasActiveCondition) ...[
             const SizedBox(height: 10),
             Wrap(
               spacing: 8,
@@ -3059,9 +3080,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                             placeholder: (context, url) => Container(
                               height: 120,
                               color: Colors.grey.shade200,
-                              child: const Center(child: CircularProgressIndicator()),
+                              child: const Center(
+                                child: CircularProgressIndicator(),
+                              ),
                             ),
-                            errorWidget: (context, url, error) => const SizedBox.shrink(),
+                            errorWidget: (context, url, error) =>
+                                const SizedBox.shrink(),
                           ),
                         ),
                       ],
@@ -3400,6 +3424,4 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       ),
     );
   }
-
-
 }

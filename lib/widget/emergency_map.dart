@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:warga_app/models/security_location.dart';
 import 'package:warga_app/models/sos_model.dart';
 
@@ -26,8 +27,8 @@ class _EmergencyMapState extends State<EmergencyMap> {
     super.initState();
 
     emergencyLatLng = LatLng(
-      double.parse(widget.emergency.latitude ?? '0'),
-      double.parse(widget.emergency.longitude ?? '0'),
+      double.tryParse(widget.emergency.latitude ?? '0') ?? 0.0,
+      double.tryParse(widget.emergency.longitude ?? '0') ?? 0.0,
     );
 
     if (widget.securityLocation != null) {
@@ -40,36 +41,42 @@ class _EmergencyMapState extends State<EmergencyMap> {
 
   @override
   Widget build(BuildContext context) {
-    final markers = <Marker>{
+    final markers = <Marker>[
       Marker(
-        markerId: const MarkerId('emergency'),
-        position: emergencyLatLng,
-        infoWindow: const InfoWindow(title: 'Lokasi Emergency'),
-        icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueRed),
+        width: 40.0,
+        height: 40.0,
+        point: emergencyLatLng,
+        child: const Icon(Icons.location_on, color: Colors.red, size: 40.0),
       ),
-    };
+    ];
 
     if (securityLatLng != null) {
       markers.add(
         Marker(
-          markerId: const MarkerId('security'),
-          position: securityLatLng!,
-          infoWindow: const InfoWindow(title: 'Posisi Security'),
-          icon: BitmapDescriptor.defaultMarkerWithHue(BitmapDescriptor.hueBlue),
+          width: 40.0,
+          height: 40.0,
+          point: securityLatLng!,
+          child: const Icon(Icons.security, color: Colors.blue, size: 40.0),
         ),
       );
     }
 
     return SizedBox(
       height: 250,
-      child: GoogleMap(
-        initialCameraPosition: CameraPosition(
-          target: emergencyLatLng,
-          zoom: 15,
+      child: FlutterMap(
+        options: MapOptions(
+          initialCenter: emergencyLatLng,
+          initialZoom: 15.0,
         ),
-        markers: markers,
-        myLocationEnabled: true,
-        zoomControlsEnabled: false,
+        children: [
+          TileLayer(
+            urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+            userAgentPackageName: 'com.example.warga_app',
+          ),
+          MarkerLayer(
+            markers: markers,
+          ),
+        ],
       ),
     );
   }

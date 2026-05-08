@@ -1,6 +1,8 @@
 // sos_screen.dart
 import 'package:flutter/material.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:flutter_map/flutter_map.dart';
+import 'package:latlong2/latlong.dart';
 import 'package:warga_app/models/security_location.dart';
 import 'package:warga_app/widget/emergency_map.dart';
 import '../models/user_model.dart';
@@ -84,7 +86,7 @@ class _SosScreenState extends State<SosScreen> {
     );
   }
 
-  Future<void> _sendEmergencySignal(String type) async {
+  Future<void> _sendEmergencySignal(String type, {Position? position}) async {
     setState(() {
       _isLoading = true;
     });
@@ -112,13 +114,12 @@ class _SosScreenState extends State<SosScreen> {
       print('👤 USER ID TYPE: ${widget.user.id.runtimeType}');
       print('👤 USER ID FINAL: $userId');
 
-    
       final request = CreateSOSRequest(
         type: type,
         details: 'SOS Emergency dari ${widget.user.name ?? "Pengguna"}',
         location: 'Lokasi saat ini',
-        latitude: '-6.2088', // Contoh koordinat (Jakarta)
-        longitude: '106.8456',
+        latitude: position?.latitude.toString() ?? '-6.2088',
+        longitude: position?.longitude.toString() ?? '106.8456',
         needVolunteer: true,
         volunteerCount: 5,
         userId: userId,
@@ -143,17 +144,7 @@ class _SosScreenState extends State<SosScreen> {
     }
   }
 
-  void _showEmergencyDetails(Emergency emergency) async {
-    SecurityLocation? securityLocation;
-
-     try {
-      final position = await Geolocator.getCurrentPosition();
-      securityLocation = SecurityLocation(
-        position.latitude,
-        position.longitude,
-      );
-    } catch (_) {}
-    
+  void _showEmergencyDetails(Emergency emergency) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
@@ -183,7 +174,6 @@ class _SosScreenState extends State<SosScreen> {
               // 🗺️ MAP
               EmergencyMap(
                 emergency: emergency,
-                securityLocation: securityLocation,
               ),
               _buildDetailItem(
                 'Dibuat',
@@ -246,199 +236,307 @@ class _SosScreenState extends State<SosScreen> {
   void _showEmergencyDialog(BuildContext context, String type) {
     showDialog(
       context: context,
-      builder: (context) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        child: Container(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // Header dengan icon emergency
-              Row(
-                children: [
-                  Container(
-                    width: 48,
-                    height: 48,
-                    decoration: BoxDecoration(
-                      color: Colors.red.shade100,
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Icon(
-                      Icons.emergency,
-                      color: Colors.red.shade700,
-                      size: 28,
-                    ),
-                  ),
-                  const SizedBox(width: 16),
-                  Expanded(
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
+      barrierDismissible: false,
+      builder: (dialogContext) {
+        Position? currentPosition;
+        bool isLoadingLocation = true;
+        String locationError = '';
+
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            void fetchLocation() async {
+              try {
+                final pos = await Geolocator.getCurrentPosition();
+                if (context.mounted) {
+                  setDialogState(() {
+                    currentPosition = pos;
+                    isLoadingLocation = false;
+                  });
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  setDialogState(() {
+                    locationError = 'Akses lokasi ditolak atau gagal';
+                    isLoadingLocation = false;
+                  });
+                }
+              }
+            }
+
+            if (isLoadingLocation && currentPosition == null && locationError.isEmpty) {
+              fetchLocation();
+            }
+
+            return Dialog(
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              child: Container(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    // Header dengan icon emergency
+                    Row(
                       children: [
-                        const Text(
-                          'Kirim SOS Emergency?',
-                          style: TextStyle(
-                            fontSize: 18,
-                            fontWeight: FontWeight.bold,
+                        Container(
+                          width: 48,
+                          height: 48,
+                          decoration: BoxDecoration(
+                            color: Colors.red.shade100,
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Icon(
+                            Icons.emergency,
+                            color: Colors.red.shade700,
+                            size: 28,
                           ),
                         ),
-                        const SizedBox(height: 4),
-                        Text(
-                          'Tipe: $type',
-                          style: TextStyle(
-                            fontSize: 14,
-                            color: Colors.grey.shade600,
+                        const SizedBox(width: 16),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              const Text(
+                                'Kirim SOS Emergency?',
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 4),
+                              Text(
+                                'Tipe: $type',
+                                style: TextStyle(
+                                  fontSize: 14,
+                                  color: Colors.grey.shade600,
+                                ),
+                              ),
+                            ],
                           ),
                         ),
                       ],
                     ),
-                  ),
-                ],
-              ),
 
-              const SizedBox(height: 20),
+                    const SizedBox(height: 20),
 
-              // Deskripsi sistem
-              const Text(
-                'Sistem akan:',
-                style: TextStyle(
-                  fontSize: 16,
-                  fontWeight: FontWeight.w600,
-                  color: Colors.grey,
-                ),
-              ),
-
-              const SizedBox(height: 12),
-
-              // Fitur-fitur yang akan dijalankan
-              _buildSystemFeature(
-                Icons.location_on,
-                'Mengirimkan lokasi Anda saat ini',
-              ),
-              _buildSystemFeature(
-                Icons.help_outline,
-                'Mengirim permintaan bantuan',
-              ),
-              _buildSystemFeature(
-                Icons.notifications_active,
-                'Memberi tahu kontak darurat',
-              ),
-              _buildSystemFeature(Icons.people_alt, 'Mencari relawan terdekat'),
-              _buildSystemFeature(
-                Icons.assignment_turned_in,
-                'Membuat emergency case dengan ID unik',
-              ),
-
-              const SizedBox(height: 20),
-
-              // Peringatan penting
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: Colors.red.shade50,
-                  borderRadius: BorderRadius.circular(12),
-                  border: Border.all(color: Colors.red.shade100),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      Icons.warning_amber_rounded,
-                      color: Colors.red.shade600,
-                      size: 20,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        'Gunakan hanya dalam keadaan darurat sesungguhnya!',
-                        style: TextStyle(
-                          fontSize: 14,
-                          color: Colors.red.shade700,
-                          fontWeight: FontWeight.w600,
-                        ),
+                    // Lokasi pengguna dengan GoogleMap Preview
+                    const Text(
+                      'Lokasi Anda Saat Ini:',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey,
                       ),
                     ),
-                  ],
-                ),
-              ),
+                    const SizedBox(height: 8),
 
-              const SizedBox(height: 24),
-
-              // Tombol aksi
-              Row(
-                children: [
-                  Expanded(
-                    child: OutlinedButton(
-                      onPressed: () => Navigator.pop(context),
-                      style: OutlinedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        side: BorderSide(color: Colors.grey.shade400),
-                        shape: RoundedRectangleBorder(
+                    if (isLoadingLocation)
+                      Container(
+                        height: 150,
+                        width: double.infinity,
+                        decoration: BoxDecoration(
+                          color: Colors.grey.shade100,
                           borderRadius: BorderRadius.circular(12),
                         ),
-                      ),
-                      child: const Text(
-                        'Batal',
-                        style: TextStyle(
-                          color: Colors.grey,
-                          fontWeight: FontWeight.w600,
+                        child: const Center(
+                          child: CircularProgressIndicator(color: Colors.red),
                         ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 12),
-                  Expanded(
-                    child: ElevatedButton(
-                      onPressed: _isLoading
-                          ? null
-                          : () {
-                              Navigator.pop(context);
-                              _sendEmergencySignal(type);
-                            },
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
+                      )
+                    else if (locationError.isNotEmpty)
+                      Container(
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.red.shade50,
                           borderRadius: BorderRadius.circular(12),
                         ),
-                        elevation: 2,
-                      ),
-                      child: _isLoading
-                          ? const SizedBox(
-                              width: 20,
-                              height: 20,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 3,
-                                valueColor: AlwaysStoppedAnimation<Color>(
-                                  Colors.white,
-                                ),
+                        child: Row(
+                          children: [
+                            Icon(Icons.location_off, color: Colors.red.shade700),
+                            const SizedBox(width: 8),
+                            Expanded(
+                              child: Text(
+                                locationError,
+                                style: TextStyle(color: Colors.red.shade700),
                               ),
-                            )
-                          : const Row(
-                              mainAxisAlignment: MainAxisAlignment.center,
-                              children: [
-                                Icon(
-                                  Icons.emergency,
-                                  color: Colors.white,
-                                  size: 18,
-                                ),
-                                SizedBox(width: 8),
-                                Text(
-                                  'Kirim SOS',
-                                  style: TextStyle(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w600,
+                            ),
+                          ],
+                        ),
+                      )
+                    else if (currentPosition != null)
+                      SizedBox(
+                        height: 150,
+                        width: double.infinity,
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(12),
+                        child: FlutterMap(
+                          options: MapOptions(
+                            initialCenter: LatLng(
+                              currentPosition!.latitude,
+                              currentPosition!.longitude,
+                            ),
+                            initialZoom: 16.0,
+                          ),
+                          children: [
+                            TileLayer(
+                              urlTemplate: 'https://tile.openstreetmap.org/{z}/{x}/{y}.png',
+                              userAgentPackageName: 'com.example.warga_app',
+                            ),
+                            MarkerLayer(
+                              markers: [
+                                Marker(
+                                  width: 40.0,
+                                  height: 40.0,
+                                  point: LatLng(
+                                    currentPosition!.latitude,
+                                    currentPosition!.longitude,
+                                  ),
+                                  child: const Icon(
+                                    Icons.location_on,
+                                    color: Colors.red,
+                                    size: 40.0,
                                   ),
                                 ),
                               ],
                             ),
+                          ],
+                        ),
+                        ),
+                      ),
+
+                    const SizedBox(height: 20),
+
+                    // Fitur-fitur yang akan dijalankan
+                    const Text(
+                      'Sistem akan:',
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: Colors.grey,
+                      ),
                     ),
-                  ),
-                ],
+                    const SizedBox(height: 8),
+                    _buildSystemFeature(
+                      Icons.location_on,
+                      'Mengirimkan lokasi Anda saat ini',
+                    ),
+                    _buildSystemFeature(
+                      Icons.notifications_active,
+                      'Memberi tahu kontak darurat',
+                    ),
+
+                    const SizedBox(height: 20),
+
+                    // Peringatan penting
+                    Container(
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: Colors.red.shade50,
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: Colors.red.shade100),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.warning_amber_rounded,
+                            color: Colors.red.shade600,
+                            size: 20,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Gunakan hanya dalam keadaan darurat!',
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: Colors.red.shade700,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+
+                    const SizedBox(height: 24),
+
+                    // Tombol aksi
+                    Row(
+                      children: [
+                        Expanded(
+                          child: OutlinedButton(
+                            onPressed: () => Navigator.pop(context),
+                            style: OutlinedButton.styleFrom(
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              side: BorderSide(color: Colors.grey.shade400),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                            ),
+                            child: const Text(
+                              'Batal',
+                              style: TextStyle(
+                                color: Colors.grey,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: ElevatedButton(
+                            onPressed: (isLoadingLocation || _isLoading)
+                                ? null
+                                : () {
+                                    Navigator.pop(context);
+                                    _sendEmergencySignal(type, position: currentPosition);
+                                  },
+                            style: ElevatedButton.styleFrom(
+                              backgroundColor: Colors.red,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              elevation: 2,
+                            ),
+                            child: _isLoading
+                                ? const SizedBox(
+                                    width: 20,
+                                    height: 20,
+                                    child: CircularProgressIndicator(
+                                      strokeWidth: 3,
+                                      valueColor: AlwaysStoppedAnimation<Color>(
+                                        Colors.white,
+                                      ),
+                                    ),
+                                  )
+                                : const Row(
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Icon(
+                                        Icons.emergency,
+                                        color: Colors.white,
+                                        size: 18,
+                                      ),
+                                      SizedBox(width: 8),
+                                      Text(
+                                        'Kirim SOS',
+                                        style: TextStyle(
+                                          color: Colors.white,
+                                          fontWeight: FontWeight.w600,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ],
+                ),
               ),
-            ],
-          ),
-        ),
-      ),
+            );
+          },
+        );
+      },
     );
   }
 
